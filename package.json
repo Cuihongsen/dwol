@@ -1,0 +1,10 @@
+{
+  "name": "dwol",
+  "private": true,
+  "scripts": {
+    "build:control-panel": "node scripts/build-control-panel.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5"
+  }
+}
