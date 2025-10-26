@@ -5,7 +5,12 @@ export const $$ = (selector, root = document) =>
 
 export const safeText = (el, text) => {
   if (!el) return;
-  el.textContent = text;
+  el.textContent = '';
+  if (text === undefined || text === null) {
+    el.removeAttribute('data-value');
+    return;
+  }
+  el.setAttribute('data-value', String(text));
 };
 
 export const now = () => Date.now();

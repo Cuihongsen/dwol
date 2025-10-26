@@ -14,11 +14,21 @@ function mountUI() {
   const body = $('#jyg-body');
   if (!body) return;
   body.innerHTML = `
-    <div class="kv"><span>状态</span><span id="jyg-status">${
-      enabled ? '运行中' : '关闭中'
-    }</span></div>
-    <div class="kv"><span>点击次数</span><span id="jyg-clicks">0</span></div>
-    <div class="kv"><span>上次点击</span><span id="jyg-last">-</span></div>
+    <div class="kv"><span class="label" data-label="状态"></span><span
+        id="jyg-status"
+        class="value state"
+        data-state="${enabled ? 'on' : 'off'}"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="点击次数"></span><span
+        id="jyg-clicks"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="上次点击"></span><span
+        id="jyg-last"
+        class="value"
+        data-value="-"
+      ></span></div>
   `;
   const toggle = $('#jyg-toggle');
   if (toggle) {
@@ -28,10 +38,13 @@ function mountUI() {
 }
 
 function updateUI() {
-  safeText($('#jyg-status'), enabled ? '运行中' : '关闭中');
+  const status = $('#jyg-status');
+  if (status) {
+    status.dataset.state = enabled ? 'on' : 'off';
+  }
   const toggle = $('#jyg-toggle');
   if (toggle) {
-    toggle.textContent = enabled ? '关闭' : '开启';
+    toggle.dataset.mode = enabled ? 'on' : 'off';
   }
   safeText($('#jyg-clicks'), clickCount);
   safeText($('#jyg-last'), formatTime(lastClickAt));

@@ -43,13 +43,31 @@ function mountUI() {
   const body = $('#rm-body');
   if (!body) return;
   body.innerHTML = `
-    <div class="kv"><span>状态</span><span id="rm-status">${
-      enabled ? '运行中' : '关闭中'
-    }</span></div>
-    <div class="kv"><span>刷新次数</span><span id="rm-refresh">0</span></div>
-    <div class="kv"><span>${TARGET_ALIAS} 出现(当前页)</span><span id="rm-found">0</span></div>
-    <div class="kv"><span>牵走次数</span><span id="rm-move">0</span></div>
-    <div class="kv"><span>上次触发</span><span id="rm-last">-</span></div>
+    <div class="kv"><span class="label" data-label="状态"></span><span
+        id="rm-status"
+        class="value state"
+        data-state="${enabled ? 'on' : 'off'}"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="刷新次数"></span><span
+        id="rm-refresh"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="${TARGET_ALIAS} 出现(当前页)"></span><span
+        id="rm-found"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="牵走次数"></span><span
+        id="rm-move"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="上次触发"></span><span
+        id="rm-last"
+        class="value"
+        data-value="-"
+      ></span></div>
   `;
   const toggle = $('#rm-toggle');
   if (toggle) {
@@ -59,10 +77,13 @@ function mountUI() {
 }
 
 function updateUI() {
-  safeText($('#rm-status'), enabled ? '运行中' : '关闭中');
+  const status = $('#rm-status');
+  if (status) {
+    status.dataset.state = enabled ? 'on' : 'off';
+  }
   const toggle = $('#rm-toggle');
   if (toggle) {
-    toggle.textContent = enabled ? '关闭' : '开启';
+    toggle.dataset.mode = enabled ? 'on' : 'off';
   }
   safeText($('#rm-refresh'), refreshCount);
   safeText($('#rm-found'), foundCount);
