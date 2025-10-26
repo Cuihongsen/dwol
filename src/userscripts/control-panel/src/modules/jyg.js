@@ -6,7 +6,8 @@ const CLICK_COOLDOWN_MS = 1000;
 const LS_ENABLED = 'jyg_enabled_v1';
 const LS_STATS = 'jyg_stats_v3';
 const LS_STATS_LEGACY = ['jyg_stats_v2'];
-const LOOT_REGEX = /捡到(.+?)x(\d+)/g;
+const LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
+const LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
 
 let enabled = loadBoolean(LS_ENABLED);
 let scanCount = 0;
@@ -70,17 +71,28 @@ function recordClick(targetLabel) {
 function recordLoot(text) {
   if (!text) return;
   let updated = false;
-  LOOT_REGEX.lastIndex = 0;
-  const matches = text.matchAll(LOOT_REGEX);
-  for (const match of matches) {
-    const full = match[0];
-    if (seenLoot.has(full)) continue;
-    seenLoot.add(full);
-    const label = match[1] ? match[1].trim() : '';
-    const count = Number(match[2]) || 0;
-    if (!label || !count) continue;
-    lootTotals[label] = (lootTotals[label] || 0) + count;
-    updated = true;
+  LOOT_BLOCK_REGEX.lastIndex = 0;
+  const blocks = text.matchAll(LOOT_BLOCK_REGEX);
+  for (const block of blocks) {
+    const fullBlock = block[0] ? block[0].trim() : '';
+    if (!fullBlock || fullBlock.length <= 2) continue;
+    const entries = fullBlock
+      .slice(2)
+      .split(/[;；]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    for (const entry of entries) {
+      const match = entry.match(LOOT_ITEM_REGEX);
+      if (!match) continue;
+      const key = `捡到${entry}`;
+      if (seenLoot.has(key)) continue;
+      seenLoot.add(key);
+      const label = match[1] ? match[1].trim() : '';
+      const count = Number(match[2]) || 0;
+      if (!label || !count) continue;
+      lootTotals[label] = (lootTotals[label] || 0) + count;
+      updated = true;
+    }
   }
   if (updated) {
     saveStats();
