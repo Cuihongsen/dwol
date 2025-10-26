@@ -4,7 +4,9 @@ import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 const SCAN_MS = 400;
 const CLICK_COOLDOWN_MS = 1000;
 const LS_ENABLED = 'jyg_enabled_v1';
-const LS_STATS = 'jyg_stats_v2';
+const LS_STATS = 'jyg_stats_v3';
+const LS_STATS_LEGACY = ['jyg_stats_v2'];
+const LOOT_REGEX = /捡到(.+?)x(\d+)/g;
 
 let enabled = loadBoolean(LS_ENABLED);
 let scanCount = 0;
@@ -12,10 +14,18 @@ let clickCount = 0;
 let lastClickAt = 0;
 let lastTarget = '-';
 let targetBreakdown = {};
+let lootTotals = {};
+let seenLoot = new Set();
 let scanTimer = null;
 
 function loadStats() {
-  const stats = loadJSON(LS_STATS);
+  let stats = loadJSON(LS_STATS);
+  if (!stats) {
+    for (const key of LS_STATS_LEGACY) {
+      stats = loadJSON(key);
+      if (stats) break;
+    }
+  }
   if (!stats) return;
   scanCount = Number(stats.scanCount) || 0;
   clickCount = Number(stats.clickCount) || 0;
@@ -24,6 +34,10 @@ function loadStats() {
   targetBreakdown =
     stats.targetBreakdown && typeof stats.targetBreakdown === 'object'
       ? { ...stats.targetBreakdown }
+      : {};
+  lootTotals =
+    stats.lootTotals && typeof stats.lootTotals === 'object'
+      ? { ...stats.lootTotals }
       : {};
 }
 
@@ -34,6 +48,7 @@ function saveStats() {
     lastClickAt,
     lastTarget,
     targetBreakdown,
+    lootTotals,
   });
 }
 
@@ -52,8 +67,38 @@ function recordClick(targetLabel) {
   saveStats();
 }
 
+function recordLoot(text) {
+  if (!text) return;
+  let updated = false;
+  LOOT_REGEX.lastIndex = 0;
+  const matches = text.matchAll(LOOT_REGEX);
+  for (const match of matches) {
+    const full = match[0];
+    if (seenLoot.has(full)) continue;
+    seenLoot.add(full);
+    const label = match[1] ? match[1].trim() : '';
+    const count = Number(match[2]) || 0;
+    if (!label || !count) continue;
+    lootTotals[label] = (lootTotals[label] || 0) + count;
+    updated = true;
+  }
+  if (updated) {
+    saveStats();
+    updateUI();
+  }
+}
+
 function formatBreakdown() {
   const entries = Object.entries(targetBreakdown);
+  if (!entries.length) return '-';
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => `${label}×${count}`)
+    .join(' / ');
+}
+
+function formatLoot() {
+  const entries = Object.entries(lootTotals);
   if (!entries.length) return '-';
   return entries
     .sort((a, b) => b[1] - a[1])
@@ -95,6 +140,11 @@ function mountUI() {
         class="value"
         data-value="-"
       ></span></div>
+    <div class="kv"><span class="label" data-label="掉落统计"></span><span
+        id="jyg-loot"
+        class="value"
+        data-value="-"
+      ></span></div>
   `;
   const toggle = $('#jyg-toggle');
   if (toggle) {
@@ -118,6 +168,7 @@ function updateUI() {
   safeText($('#jyg-last'), formatTime(lastClickAt));
   safeText($('#jyg-scans'), scanCount);
   safeText($('#jyg-targets'), formatBreakdown());
+  safeText($('#jyg-loot'), formatLoot());
 }
 
 function pickTarget(anchors) {
@@ -172,6 +223,8 @@ function start() {
   stop();
   scanTimer = setInterval(() => {
     if (!enabled) return;
+    const text = document.body ? document.body.innerText : '';
+    if (text) recordLoot(text);
     if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
     const anchors = $$('a');
     if (!anchors.length) return;
