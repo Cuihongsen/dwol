@@ -1,5 +1,6 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
+import { emitModuleState } from '../events.js';
 
 const REFRESH_MS = 2000;
 const CHECK_MS = 2000;
@@ -9,6 +10,7 @@ const TARGET_ALIAS = '目标马';
 const LS_STATS = 'rm_stats_v1';
 const LS_PENDING_RETURN = 'rm_pending_return_v1';
 const LS_ENABLED = 'rm_enabled_v1';
+const MODULE_ID = 'rm';
 
 let enabled = loadBoolean(LS_ENABLED);
 let refreshCount = 0;
@@ -38,6 +40,10 @@ function resetStats() {
   foundCount = 0;
   saveStats();
   updateUI();
+}
+
+function announceState() {
+  emitModuleState({ moduleId: MODULE_ID, enabled });
 }
 
 function setPendingReturn(value) {
@@ -192,6 +198,7 @@ function enable() {
   startRefreshing();
   startChecking();
   updateUI();
+  announceState();
 }
 
 function disable() {
@@ -200,6 +207,7 @@ function disable() {
   stopRefreshing();
   stopChecking();
   updateUI();
+  announceState();
 }
 
 function toggleEnabled() {
@@ -213,6 +221,7 @@ function toggleEnabled() {
 export function init() {
   loadStats();
   mountUI();
+  announceState();
   if (!enabled) return;
   if (isPendingReturn()) {
     tryClickReturn();

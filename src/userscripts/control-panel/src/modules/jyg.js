@@ -1,5 +1,6 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
+import { emitModuleState } from '../events.js';
 
 const SCAN_MS = 400;
 const CLICK_COOLDOWN_MS = 1000;
@@ -8,6 +9,8 @@ const LS_STATS = 'jyg_stats_v3';
 const LS_STATS_LEGACY = ['jyg_stats_v2'];
 const LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
 const LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
+
+const MODULE_ID = 'jyg';
 
 let enabled = loadBoolean(LS_ENABLED);
 let scanCount = 0;
@@ -51,6 +54,10 @@ function saveStats() {
     targetBreakdown,
     lootTotals,
   });
+}
+
+function announceState() {
+  emitModuleState({ moduleId: MODULE_ID, enabled });
 }
 
 function refreshSeenLootSnapshot() {
@@ -298,6 +305,7 @@ function enable() {
   saveBoolean(LS_ENABLED, true);
   start();
   updateUI();
+  announceState();
 }
 
 function disable() {
@@ -306,6 +314,7 @@ function disable() {
   stop();
   saveStats();
   updateUI();
+  announceState();
 }
 
 function toggleEnabled() {
@@ -319,6 +328,7 @@ function toggleEnabled() {
 export function init() {
   loadStats();
   mountUI();
+  announceState();
   if (enabled) {
     start();
   }

@@ -1,7 +1,19 @@
 import { $ } from './dom.js';
+import { MODULE_STATE_EVENT } from './events.js';
 
 const PANEL_STYLE_ID = 'um-style';
 const PANEL_ID = 'um-panel';
+const LS_ACTIVE_MODULE = 'um_active_module_v1';
+
+const MODULES = [
+  { id: 'rm', title: '刷新马', enabledKey: 'rm_enabled_v1' },
+  { id: 'jyg', title: '景阳岗', enabledKey: 'jyg_enabled_v1' },
+];
+
+let navButtons = [];
+let sections = [];
+let currentActiveModule = null;
+let listenersBound = false;
 
 const PANEL_STYLE = `
 :root{color-scheme:light}
@@ -96,6 +108,68 @@ function buildSection(title, idPrefix) {
   return sec;
 }
 
+function pickEnabledModule(excludeId = null) {
+  for (const mod of MODULES) {
+    if (excludeId && mod.id === excludeId) continue;
+    if (localStorage.getItem(mod.enabledKey) === '1') {
+      return mod.id;
+    }
+  }
+  return null;
+}
+
+function chooseInitialModule() {
+  const stored = localStorage.getItem(LS_ACTIVE_MODULE);
+  if (stored && MODULES.some((mod) => mod.id === stored)) {
+    return stored;
+  }
+  const enabled = pickEnabledModule();
+  if (enabled) return enabled;
+  return MODULES[0]?.id ?? null;
+}
+
+function activate(moduleId, { persist = true } = {}) {
+  if (!moduleId) return;
+  if (!MODULES.some((mod) => mod.id === moduleId)) return;
+  currentActiveModule = moduleId;
+  for (const btn of navButtons) {
+    const active = btn.dataset.module === moduleId;
+    btn.dataset.active = active ? 'true' : 'false';
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  for (const sec of sections) {
+    const active = sec.dataset.module === moduleId;
+    sec.dataset.active = active ? 'true' : 'false';
+    if (active) {
+      sec.removeAttribute('hidden');
+    } else {
+      sec.setAttribute('hidden', '');
+    }
+  }
+  if (persist) {
+    localStorage.setItem(LS_ACTIVE_MODULE, moduleId);
+  }
+}
+
+export function focusModule(moduleId, options) {
+  activate(moduleId, options);
+}
+
+function bindModuleStateListener() {
+  if (listenersBound) return;
+  window.addEventListener(MODULE_STATE_EVENT, (event) => {
+    const detail = event?.detail;
+    if (!detail || !detail.moduleId) return;
+    if (detail.enabled) {
+      focusModule(detail.moduleId);
+    } else if (currentActiveModule === detail.moduleId) {
+      const next = pickEnabledModule(detail.moduleId) || MODULES[0]?.id;
+      focusModule(next, { persist: true });
+    }
+  });
+  listenersBound = true;
+}
+
 export function injectStyle() {
   if ($(`#${PANEL_STYLE_ID}`)) return;
   const style = document.createElement('style');
@@ -105,7 +179,14 @@ export function injectStyle() {
 }
 
 export function ensurePanel() {
-  if ($(`#${PANEL_ID}`)) return;
+  bindModuleStateListener();
+  if ($(`#${PANEL_ID}`)) {
+    const initialExisting = chooseInitialModule();
+    if (initialExisting) {
+      activate(initialExisting, { persist: false });
+    }
+    return;
+  }
 
   const panel = document.createElement('div');
   panel.id = PANEL_ID;
@@ -116,32 +197,10 @@ export function ensurePanel() {
   const modulesWrap = document.createElement('div');
   modulesWrap.className = 'modules';
 
-  const modules = [
-    { id: 'rm', title: '刷新马' },
-    { id: 'jyg', title: '景阳岗' },
-  ];
+  navButtons = [];
+  sections = [];
 
-  const navButtons = [];
-  const sections = [];
-
-  function activate(moduleId) {
-    for (const btn of navButtons) {
-      const active = btn.dataset.module === moduleId;
-      btn.dataset.active = active ? 'true' : 'false';
-      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    }
-    for (const sec of sections) {
-      const active = sec.dataset.module === moduleId;
-      sec.dataset.active = active ? 'true' : 'false';
-      if (active) {
-        sec.removeAttribute('hidden');
-      } else {
-        sec.setAttribute('hidden', '');
-      }
-    }
-  }
-
-  for (const [index, mod] of modules.entries()) {
+  for (const [index, mod] of MODULES.entries()) {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.module = mod.id;
@@ -149,7 +208,7 @@ export function ensurePanel() {
     button.setAttribute('aria-label', `${mod.title} 面板`);
     button.setAttribute('aria-pressed', index === 0 ? 'true' : 'false');
     button.dataset.active = index === 0 ? 'true' : 'false';
-    button.addEventListener('click', () => activate(mod.id));
+    button.addEventListener('click', () => focusModule(mod.id));
     nav.appendChild(button);
     navButtons.push(button);
 
@@ -169,7 +228,8 @@ export function ensurePanel() {
 
   document.body.appendChild(panel);
 
-  if (modules.length) {
-    activate(modules[0].id);
+  const initial = chooseInitialModule();
+  if (initial) {
+    activate(initial, { persist: false });
   }
 }

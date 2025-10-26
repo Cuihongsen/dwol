@@ -44,9 +44,24 @@
   var now = () => Date.now();
   var formatTime = (timestamp) => timestamp ? new Date(timestamp).toLocaleTimeString() : "-";
 
+  // src/userscripts/control-panel/src/events.js
+  var MODULE_STATE_EVENT = "um:module-state";
+  function emitModuleState(detail) {
+    window.dispatchEvent(new CustomEvent(MODULE_STATE_EVENT, { detail }));
+  }
+
   // src/userscripts/control-panel/src/panel.js
   var PANEL_STYLE_ID = "um-style";
   var PANEL_ID = "um-panel";
+  var LS_ACTIVE_MODULE = "um_active_module_v1";
+  var MODULES = [
+    { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
+    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" }
+  ];
+  var navButtons = [];
+  var sections = [];
+  var currentActiveModule = null;
+  var listenersBound = false;
   var PANEL_STYLE = `
 :root{color-scheme:light}
 body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%);color:#1f2937;font:13px/1.7 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
@@ -128,6 +143,65 @@ tr:last-child td{border-bottom:none}
     sec.appendChild(body);
     return sec;
   }
+  function pickEnabledModule(excludeId = null) {
+    for (const mod of MODULES) {
+      if (excludeId && mod.id === excludeId) continue;
+      if (localStorage.getItem(mod.enabledKey) === "1") {
+        return mod.id;
+      }
+    }
+    return null;
+  }
+  function chooseInitialModule() {
+    var _a, _b;
+    const stored = localStorage.getItem(LS_ACTIVE_MODULE);
+    if (stored && MODULES.some((mod) => mod.id === stored)) {
+      return stored;
+    }
+    const enabled3 = pickEnabledModule();
+    if (enabled3) return enabled3;
+    return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
+  }
+  function activate(moduleId, { persist = true } = {}) {
+    if (!moduleId) return;
+    if (!MODULES.some((mod) => mod.id === moduleId)) return;
+    currentActiveModule = moduleId;
+    for (const btn of navButtons) {
+      const active = btn.dataset.module === moduleId;
+      btn.dataset.active = active ? "true" : "false";
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+    for (const sec of sections) {
+      const active = sec.dataset.module === moduleId;
+      sec.dataset.active = active ? "true" : "false";
+      if (active) {
+        sec.removeAttribute("hidden");
+      } else {
+        sec.setAttribute("hidden", "");
+      }
+    }
+    if (persist) {
+      localStorage.setItem(LS_ACTIVE_MODULE, moduleId);
+    }
+  }
+  function focusModule(moduleId, options) {
+    activate(moduleId, options);
+  }
+  function bindModuleStateListener() {
+    if (listenersBound) return;
+    window.addEventListener(MODULE_STATE_EVENT, (event) => {
+      var _a;
+      const detail = event == null ? void 0 : event.detail;
+      if (!detail || !detail.moduleId) return;
+      if (detail.enabled) {
+        focusModule(detail.moduleId);
+      } else if (currentActiveModule === detail.moduleId) {
+        const next = pickEnabledModule(detail.moduleId) || ((_a = MODULES[0]) == null ? void 0 : _a.id);
+        focusModule(next, { persist: true });
+      }
+    });
+    listenersBound = true;
+  }
   function injectStyle() {
     if ($(`#${PANEL_STYLE_ID}`)) return;
     const style = document.createElement("style");
@@ -136,36 +210,23 @@ tr:last-child td{border-bottom:none}
     document.head.appendChild(style);
   }
   function ensurePanel() {
-    if ($(`#${PANEL_ID}`)) return;
+    bindModuleStateListener();
+    if ($(`#${PANEL_ID}`)) {
+      const initialExisting = chooseInitialModule();
+      if (initialExisting) {
+        activate(initialExisting, { persist: false });
+      }
+      return;
+    }
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
     const nav = document.createElement("div");
     nav.className = "nav";
     const modulesWrap = document.createElement("div");
     modulesWrap.className = "modules";
-    const modules = [
-      { id: "rm", title: "\u5237\u65B0\u9A6C" },
-      { id: "jyg", title: "\u666F\u9633\u5C97" }
-    ];
-    const navButtons = [];
-    const sections = [];
-    function activate(moduleId) {
-      for (const btn of navButtons) {
-        const active = btn.dataset.module === moduleId;
-        btn.dataset.active = active ? "true" : "false";
-        btn.setAttribute("aria-pressed", active ? "true" : "false");
-      }
-      for (const sec of sections) {
-        const active = sec.dataset.module === moduleId;
-        sec.dataset.active = active ? "true" : "false";
-        if (active) {
-          sec.removeAttribute("hidden");
-        } else {
-          sec.setAttribute("hidden", "");
-        }
-      }
-    }
-    for (const [index, mod] of modules.entries()) {
+    navButtons = [];
+    sections = [];
+    for (const [index, mod] of MODULES.entries()) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.module = mod.id;
@@ -173,7 +234,7 @@ tr:last-child td{border-bottom:none}
       button.setAttribute("aria-label", `${mod.title} \u9762\u677F`);
       button.setAttribute("aria-pressed", index === 0 ? "true" : "false");
       button.dataset.active = index === 0 ? "true" : "false";
-      button.addEventListener("click", () => activate(mod.id));
+      button.addEventListener("click", () => focusModule(mod.id));
       nav.appendChild(button);
       navButtons.push(button);
       const section = buildSection(mod.title, mod.id);
@@ -189,8 +250,9 @@ tr:last-child td{border-bottom:none}
     panel.appendChild(nav);
     panel.appendChild(modulesWrap);
     document.body.appendChild(panel);
-    if (modules.length) {
-      activate(modules[0].id);
+    const initial = chooseInitialModule();
+    if (initial) {
+      activate(initial, { persist: false });
     }
   }
 
@@ -233,6 +295,7 @@ tr:last-child td{border-bottom:none}
   var LS_STATS = "rm_stats_v1";
   var LS_PENDING_RETURN = "rm_pending_return_v1";
   var LS_ENABLED = "rm_enabled_v1";
+  var MODULE_ID = "rm";
   var enabled = loadBoolean(LS_ENABLED);
   var refreshCount = 0;
   var moveClickCount = 0;
@@ -258,6 +321,9 @@ tr:last-child td{border-bottom:none}
     foundCount = 0;
     saveStats();
     updateUI();
+  }
+  function announceState() {
+    emitModuleState({ moduleId: MODULE_ID, enabled });
   }
   function setPendingReturn(value) {
     saveBoolean(LS_PENDING_RETURN, value);
@@ -402,6 +468,7 @@ tr:last-child td{border-bottom:none}
     startRefreshing();
     startChecking();
     updateUI();
+    announceState();
   }
   function disable() {
     enabled = false;
@@ -409,6 +476,7 @@ tr:last-child td{border-bottom:none}
     stopRefreshing();
     stopChecking();
     updateUI();
+    announceState();
   }
   function toggleEnabled() {
     if (enabled) {
@@ -420,6 +488,7 @@ tr:last-child td{border-bottom:none}
   function init() {
     loadStats();
     mountUI();
+    announceState();
     if (!enabled) return;
     if (isPendingReturn()) {
       tryClickReturn();
@@ -453,6 +522,7 @@ tr:last-child td{border-bottom:none}
   var LS_STATS_LEGACY = ["jyg_stats_v2"];
   var LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
   var LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
+  var MODULE_ID2 = "jyg";
   var enabled2 = loadBoolean(LS_ENABLED2);
   var scanCount = 0;
   var clickCount = 0;
@@ -487,6 +557,9 @@ tr:last-child td{border-bottom:none}
       targetBreakdown,
       lootTotals
     });
+  }
+  function announceState2() {
+    emitModuleState({ moduleId: MODULE_ID2, enabled: enabled2 });
   }
   function refreshSeenLootSnapshot() {
     seenLoot = /* @__PURE__ */ new Set();
@@ -703,6 +776,7 @@ tr:last-child td{border-bottom:none}
     saveBoolean(LS_ENABLED2, true);
     start();
     updateUI2();
+    announceState2();
   }
   function disable2() {
     enabled2 = false;
@@ -710,6 +784,7 @@ tr:last-child td{border-bottom:none}
     stop();
     saveStats2();
     updateUI2();
+    announceState2();
   }
   function toggleEnabled2() {
     if (enabled2) {
@@ -721,6 +796,7 @@ tr:last-child td{border-bottom:none}
   function init2() {
     loadStats2();
     mountUI2();
+    announceState2();
     if (enabled2) {
       start();
     }
