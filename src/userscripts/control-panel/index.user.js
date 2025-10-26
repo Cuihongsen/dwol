@@ -9,6 +9,21 @@
 
 (() => {
   var __defProp = Object.defineProperty;
+  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __propIsEnum = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    if (__getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(b)) {
+        if (__propIsEnum.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      }
+    return a;
+  };
   var __export = (target, all) => {
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
@@ -33,41 +48,41 @@
   var PANEL_STYLE_ID = "um-style";
   var PANEL_ID = "um-panel";
   var PANEL_STYLE = `
-:root{color-scheme:dark}
-body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 20%,rgba(30,64,175,.45),transparent 55%),#0b1220;color:#e2e8f0;font:14px/1.8 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
+:root{color-scheme:light}
+body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%);color:#1f2937;font:14px/1.8 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
 body>*:not(#um-panel){max-width:960px;margin-inline:auto;padding:0 32px}
 main,section,article{display:block;margin-inline:auto;max-width:960px}
 p{margin:16px auto;max-width:72ch}
 li{max-width:72ch}
-a{color:#38bdf8;text-decoration:none}
-a:hover{color:#c084fc}
+a{color:#2563eb;text-decoration:none}
+a:hover{color:#7c3aed}
 pre,code{font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace}
-pre{background:rgba(15,23,42,.65);border:1px solid rgba(148,163,184,.22);border-radius:14px;padding:18px;overflow:auto;color:#e2e8f0}
-table{width:100%;border-collapse:collapse;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.18);border-radius:14px;overflow:hidden}
-th,td{padding:12px 16px;border-bottom:1px solid rgba(148,163,184,.12);text-align:left}
-th{color:#f8fafc;font-weight:600;background:rgba(51,65,85,.55)}
+pre{background:#f1f5f9;border:1px solid #cbd5f5;border-radius:14px;padding:18px;overflow:auto;color:#0f172a}
+table{width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #d0d7ea;border-radius:14px;overflow:hidden}
+th,td{padding:12px 16px;border-bottom:1px solid #e2e8f0;text-align:left}
+th{color:#0f172a;font-weight:600;background:#e2e8f0}
 tr:last-child td{border-bottom:none}
-#um-panel{position:fixed;right:18px;bottom:18px;width:340px;z-index:2147483647;font:13px/1.6 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#e2e8f0;background:radial-gradient(circle at 20% -10%,rgba(56,189,248,.32),transparent 55%),linear-gradient(135deg,rgba(15,23,42,.94),rgba(30,41,59,.92));border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 28px 60px rgba(15,23,42,.55);backdrop-filter:blur(18px);overflow:hidden}
-#um-panel::after{content:'';position:absolute;inset:1px;border-radius:16px;pointer-events:none;background:linear-gradient(130deg,rgba(148,163,184,.18),rgba(96,165,250,.08) 35%,transparent 65%)}
-#um-panel .sec{position:relative;border-top:1px solid rgba(148,163,184,.14)}
+#um-panel{position:fixed;right:18px;bottom:18px;width:340px;z-index:2147483647;font:13px/1.6 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#0f172a;background:linear-gradient(135deg,#ffffff 0%,#f1f5f9 100%);border:1px solid rgba(148,163,184,.4);border-radius:18px;box-shadow:0 24px 60px rgba(15,23,42,.12);backdrop-filter:blur(10px);overflow:hidden}
+#um-panel::after{content:'';position:absolute;inset:1px;border-radius:16px;pointer-events:none;background:linear-gradient(130deg,rgba(255,255,255,.65),rgba(148,163,184,.18) 40%,transparent 75%)}
+#um-panel .sec{position:relative;border-top:1px solid rgba(148,163,184,.25)}
 #um-panel .sec:first-child{border-top:none}
-#um-panel .hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 14px;background:rgba(15,23,42,.55)}
+#um-panel .hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 14px;background:rgba(226,232,240,.65)}
 #um-panel .hdr b{position:relative;font-weight:600;letter-spacing:.04em}
-#um-panel .hdr b::before{content:attr(data-label);display:block;color:#cbd5f5;text-shadow:0 0 12px rgba(148,163,184,.35)}
-#um-panel .hdr button{position:relative;min-width:84px;padding:6px 18px;border-radius:999px;border:1px solid rgba(94,234,212,.45);background:linear-gradient(135deg,rgba(45,212,191,.2),rgba(59,130,246,.2));box-shadow:inset 0 1px 0 rgba(255,255,255,.12);cursor:pointer;color:#f8fafc;transition:all .25s ease}
-#um-panel .hdr button:hover{border-color:rgba(94,234,212,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 6px 16px rgba(14,116,144,.25);transform:translateY(-1px)}
+#um-panel .hdr b::before{content:attr(data-label);display:block;color:#1d4ed8;text-shadow:0 2px 6px rgba(148,163,184,.35)}
+#um-panel .hdr button{position:relative;min-width:84px;padding:6px 18px;border-radius:999px;border:1px solid rgba(59,130,246,.45);background:linear-gradient(135deg,#bfdbfe,#dbeafe);box-shadow:inset 0 1px 0 rgba(255,255,255,.9);cursor:pointer;color:#1d4ed8;transition:all .25s ease}
+#um-panel .hdr button:hover{border-color:rgba(59,130,246,.75);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 16px rgba(59,130,246,.25);transform:translateY(-1px)}
 #um-panel .hdr button:active{transform:translateY(0)}
 #um-panel .hdr button::before{content:'';font-weight:600;letter-spacing:.08em}
 #um-panel .hdr button[data-mode="on"]::before{content:'\u5173\u95ED'}
 #um-panel .hdr button[data-mode="off"]::before{content:'\u5F00\u542F'}
-#um-panel .body{padding:14px 20px 18px;display:grid;gap:12px;background:rgba(15,23,42,.32)}
+#um-panel .body{padding:14px 20px 18px;display:grid;gap:12px;background:rgba(248,250,252,.9)}
 #um-panel .kv{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 0}
-#um-panel .kv:not(:last-child){border-bottom:1px dashed rgba(148,163,184,.15)}
-#um-panel .kv .label::before{content:attr(data-label);color:#94a3b8;font-size:12px;letter-spacing:.04em}
+#um-panel .kv:not(:last-child){border-bottom:1px dashed rgba(148,163,184,.35)}
+#um-panel .kv .label::before{content:attr(data-label);color:#475569;font-size:12px;letter-spacing:.04em}
 #um-panel .kv .value{position:relative;font-variant-numeric:tabular-nums}
-#um-panel .kv .value::before{content:attr(data-value);color:#f8fafc;font-size:13px}
-#um-panel .kv .state[data-state="on"]::before{content:'\u8FD0\u884C\u4E2D';color:#34d399;font-weight:600;text-shadow:0 0 12px rgba(52,211,153,.35)}
-#um-panel .kv .state[data-state="off"]::before{content:'\u5173\u95ED\u4E2D';color:#f87171;font-weight:600;text-shadow:0 0 10px rgba(248,113,113,.32)}
+#um-panel .kv .value::before{content:attr(data-value);color:#0f172a;font-size:13px}
+#um-panel .kv .state[data-state="on"]::before{content:'\u8FD0\u884C\u4E2D';color:#15803d;font-weight:600;text-shadow:0 0 8px rgba(74,222,128,.4)}
+#um-panel .kv .state[data-state="off"]::before{content:'\u5173\u95ED\u4E2D';color:#dc2626;font-weight:600;text-shadow:0 0 6px rgba(248,113,113,.35)}
 #um-panel .hint::before{content:attr(data-label);color:#64748b;font-size:11px;letter-spacing:.04em}
 `;
   function buildSection(title, idPrefix) {
@@ -351,10 +366,50 @@ tr:last-child td{border-bottom:none}
   var SCAN_MS = 400;
   var CLICK_COOLDOWN_MS = 1e3;
   var LS_ENABLED2 = "jyg_enabled_v1";
+  var LS_STATS2 = "jyg_stats_v2";
   var enabled2 = loadBoolean(LS_ENABLED2);
+  var scanCount = 0;
   var clickCount = 0;
   var lastClickAt = 0;
+  var lastTarget = "-";
+  var targetBreakdown = {};
   var scanTimer = null;
+  function loadStats2() {
+    const stats = loadJSON(LS_STATS2);
+    if (!stats) return;
+    scanCount = Number(stats.scanCount) || 0;
+    clickCount = Number(stats.clickCount) || 0;
+    lastClickAt = typeof stats.lastClickAt === "number" ? stats.lastClickAt : 0;
+    lastTarget = stats.lastTarget ? String(stats.lastTarget) : "-";
+    targetBreakdown = stats.targetBreakdown && typeof stats.targetBreakdown === "object" ? __spreadValues({}, stats.targetBreakdown) : {};
+  }
+  function saveStats2() {
+    saveJSON(LS_STATS2, {
+      scanCount,
+      clickCount,
+      lastClickAt,
+      lastTarget,
+      targetBreakdown
+    });
+  }
+  function recordScan() {
+    scanCount += 1;
+    saveStats2();
+  }
+  function recordClick(targetLabel) {
+    clickCount += 1;
+    lastClickAt = now();
+    lastTarget = targetLabel;
+    if (targetLabel) {
+      targetBreakdown[targetLabel] = (targetBreakdown[targetLabel] || 0) + 1;
+    }
+    saveStats2();
+  }
+  function formatBreakdown() {
+    const entries = Object.entries(targetBreakdown);
+    if (!entries.length) return "-";
+    return entries.sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}\xD7${count}`).join(" / ");
+  }
   function mountUI2() {
     const body = $("#jyg-body");
     if (!body) return;
@@ -369,8 +424,23 @@ tr:last-child td{border-bottom:none}
         class="value"
         data-value="0"
       ></span></div>
+    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u76EE\u6807"></span><span
+        id="jyg-last-target"
+        class="value"
+        data-value="-"
+      ></span></div>
     <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u70B9\u51FB"></span><span
         id="jyg-last"
+        class="value"
+        data-value="-"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u8F6E\u8BE2\u6B21\u6570"></span><span
+        id="jyg-scans"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u76EE\u6807\u7EDF\u8BA1"></span><span
+        id="jyg-targets"
         class="value"
         data-value="-"
       ></span></div>
@@ -392,28 +462,53 @@ tr:last-child td{border-bottom:none}
       toggle.setAttribute("aria-pressed", enabled2 ? "true" : "false");
     }
     safeText($("#jyg-clicks"), clickCount);
+    safeText($("#jyg-last-target"), lastTarget || "-");
     safeText($("#jyg-last"), formatTime(lastClickAt));
+    safeText($("#jyg-scans"), scanCount);
+    safeText($("#jyg-targets"), formatBreakdown());
   }
   function pickTarget(anchors) {
     const byExact = (txt) => anchors.find((a) => a.textContent && a.textContent.trim() === txt);
     const byIncludes = (kw) => anchors.filter((a) => a.textContent && a.textContent.includes(kw));
-    let target = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-    if (!target) target = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B");
-    if (!target) target = byExact("\u666F\u9633\u5C97\u5927\u866B");
-    if (!target) target = byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-    if (!target) {
-      const arr = byIncludes("\u7075\u829D");
-      target = arr && arr.length ? arr[0] : null;
-    }
-    if (!target) target = byExact("\u8FD4\u56DE\u6E38\u620F");
-    if (!target) {
-      const woods = byIncludes("\u6811\u6797");
-      if (woods && woods.length) {
-        const idx = Math.floor(Math.random() * woods.length);
-        target = woods[idx];
+    const attempts = [
+      () => {
+        const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B");
+        return el ? { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B" } : null;
+      },
+      () => {
+        const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B");
+        return el ? { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B" } : null;
+      },
+      () => {
+        const el = byExact("\u666F\u9633\u5C97\u5927\u866B");
+        return el ? { el, label: "\u666F\u9633\u5C97\u5927\u866B" } : null;
+      },
+      () => {
+        const el = byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B");
+        return el ? { el, label: "\u666F\u9633\u5C97\u5C0F\u5927\u866B" } : null;
+      },
+      () => {
+        const arr = byIncludes("\u7075\u829D");
+        return arr && arr.length ? { el: arr[0], label: "\u7075\u829D" } : null;
+      },
+      () => {
+        const el = byExact("\u8FD4\u56DE\u6E38\u620F");
+        return el ? { el, label: "\u8FD4\u56DE\u6E38\u620F" } : null;
+      },
+      () => {
+        const woods = byIncludes("\u6811\u6797");
+        if (woods && woods.length) {
+          const idx = Math.floor(Math.random() * woods.length);
+          return { el: woods[idx], label: "\u6811\u6797(\u968F\u673A)" };
+        }
+        return null;
       }
+    ];
+    for (const attempt of attempts) {
+      const result = attempt();
+      if (result) return result;
     }
-    return target;
+    return null;
   }
   function start() {
     stop();
@@ -422,11 +517,13 @@ tr:last-child td{border-bottom:none}
       if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
       const anchors = $$("a");
       if (!anchors.length) return;
-      const target = pickTarget(anchors);
-      if (target) {
-        target.click();
-        clickCount += 1;
-        lastClickAt = now();
+      const result = pickTarget(anchors);
+      recordScan();
+      if (result) {
+        result.el.click();
+        recordClick(result.label);
+        updateUI2();
+      } else {
         updateUI2();
       }
     }, SCAN_MS);
@@ -445,6 +542,7 @@ tr:last-child td{border-bottom:none}
     enabled2 = false;
     saveBoolean(LS_ENABLED2, false);
     stop();
+    saveStats2();
     updateUI2();
   }
   function toggleEnabled2() {
@@ -455,6 +553,7 @@ tr:last-child td{border-bottom:none}
     }
   }
   function init2() {
+    loadStats2();
     mountUI2();
     if (enabled2) {
       start();
@@ -462,6 +561,7 @@ tr:last-child td{border-bottom:none}
   }
   function pause2() {
     stop();
+    saveStats2();
   }
   function resume2() {
     if (enabled2) {

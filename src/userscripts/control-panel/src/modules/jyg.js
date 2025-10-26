@@ -1,14 +1,65 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
-import { loadBoolean, saveBoolean } from '../storage.js';
+import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 
 const SCAN_MS = 400;
 const CLICK_COOLDOWN_MS = 1000;
 const LS_ENABLED = 'jyg_enabled_v1';
+const LS_STATS = 'jyg_stats_v2';
 
 let enabled = loadBoolean(LS_ENABLED);
+let scanCount = 0;
 let clickCount = 0;
 let lastClickAt = 0;
+let lastTarget = '-';
+let targetBreakdown = {};
 let scanTimer = null;
+
+function loadStats() {
+  const stats = loadJSON(LS_STATS);
+  if (!stats) return;
+  scanCount = Number(stats.scanCount) || 0;
+  clickCount = Number(stats.clickCount) || 0;
+  lastClickAt = typeof stats.lastClickAt === 'number' ? stats.lastClickAt : 0;
+  lastTarget = stats.lastTarget ? String(stats.lastTarget) : '-';
+  targetBreakdown =
+    stats.targetBreakdown && typeof stats.targetBreakdown === 'object'
+      ? { ...stats.targetBreakdown }
+      : {};
+}
+
+function saveStats() {
+  saveJSON(LS_STATS, {
+    scanCount,
+    clickCount,
+    lastClickAt,
+    lastTarget,
+    targetBreakdown,
+  });
+}
+
+function recordScan() {
+  scanCount += 1;
+  saveStats();
+}
+
+function recordClick(targetLabel) {
+  clickCount += 1;
+  lastClickAt = now();
+  lastTarget = targetLabel;
+  if (targetLabel) {
+    targetBreakdown[targetLabel] = (targetBreakdown[targetLabel] || 0) + 1;
+  }
+  saveStats();
+}
+
+function formatBreakdown() {
+  const entries = Object.entries(targetBreakdown);
+  if (!entries.length) return '-';
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => `${label}×${count}`)
+    .join(' / ');
+}
 
 function mountUI() {
   const body = $('#jyg-body');
@@ -24,8 +75,23 @@ function mountUI() {
         class="value"
         data-value="0"
       ></span></div>
+    <div class="kv"><span class="label" data-label="上次目标"></span><span
+        id="jyg-last-target"
+        class="value"
+        data-value="-"
+      ></span></div>
     <div class="kv"><span class="label" data-label="上次点击"></span><span
         id="jyg-last"
+        class="value"
+        data-value="-"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="轮询次数"></span><span
+        id="jyg-scans"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="目标统计"></span><span
+        id="jyg-targets"
         class="value"
         data-value="-"
       ></span></div>
@@ -48,30 +114,58 @@ function updateUI() {
     toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   safeText($('#jyg-clicks'), clickCount);
+  safeText($('#jyg-last-target'), lastTarget || '-');
   safeText($('#jyg-last'), formatTime(lastClickAt));
+  safeText($('#jyg-scans'), scanCount);
+  safeText($('#jyg-targets'), formatBreakdown());
 }
 
 function pickTarget(anchors) {
-  const byExact = (txt) => anchors.find((a) => a.textContent && a.textContent.trim() === txt);
-  const byIncludes = (kw) => anchors.filter((a) => a.textContent && a.textContent.includes(kw));
+  const byExact = (txt) =>
+    anchors.find((a) => a.textContent && a.textContent.trim() === txt);
+  const byIncludes = (kw) =>
+    anchors.filter((a) => a.textContent && a.textContent.includes(kw));
 
-  let target = byExact('攻击景阳岗小大虫');
-  if (!target) target = byExact('攻击景阳岗大虫');
-  if (!target) target = byExact('景阳岗大虫');
-  if (!target) target = byExact('景阳岗小大虫');
-  if (!target) {
-    const arr = byIncludes('灵芝');
-    target = arr && arr.length ? arr[0] : null;
+  const attempts = [
+    () => {
+      const el = byExact('攻击景阳岗小大虫');
+      return el ? { el, label: '攻击景阳岗小大虫' } : null;
+    },
+    () => {
+      const el = byExact('攻击景阳岗大虫');
+      return el ? { el, label: '攻击景阳岗大虫' } : null;
+    },
+    () => {
+      const el = byExact('景阳岗大虫');
+      return el ? { el, label: '景阳岗大虫' } : null;
+    },
+    () => {
+      const el = byExact('景阳岗小大虫');
+      return el ? { el, label: '景阳岗小大虫' } : null;
+    },
+    () => {
+      const arr = byIncludes('灵芝');
+      return arr && arr.length ? { el: arr[0], label: '灵芝' } : null;
+    },
+    () => {
+      const el = byExact('返回游戏');
+      return el ? { el, label: '返回游戏' } : null;
+    },
+    () => {
+      const woods = byIncludes('树林');
+      if (woods && woods.length) {
+        const idx = Math.floor(Math.random() * woods.length);
+        return { el: woods[idx], label: '树林(随机)' };
+      }
+      return null;
+    },
+  ];
+
+  for (const attempt of attempts) {
+    const result = attempt();
+    if (result) return result;
   }
-  if (!target) target = byExact('返回游戏');
-  if (!target) {
-    const woods = byIncludes('树林');
-    if (woods && woods.length) {
-      const idx = Math.floor(Math.random() * woods.length);
-      target = woods[idx];
-    }
-  }
-  return target;
+  return null;
 }
 
 function start() {
@@ -81,11 +175,13 @@ function start() {
     if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
     const anchors = $$('a');
     if (!anchors.length) return;
-    const target = pickTarget(anchors);
-    if (target) {
-      target.click();
-      clickCount += 1;
-      lastClickAt = now();
+    const result = pickTarget(anchors);
+    recordScan();
+    if (result) {
+      result.el.click();
+      recordClick(result.label);
+      updateUI();
+    } else {
       updateUI();
     }
   }, SCAN_MS);
@@ -107,6 +203,7 @@ function disable() {
   enabled = false;
   saveBoolean(LS_ENABLED, false);
   stop();
+  saveStats();
   updateUI();
 }
 
@@ -119,6 +216,7 @@ function toggleEnabled() {
 }
 
 export function init() {
+  loadStats();
   mountUI();
   if (enabled) {
     start();
@@ -127,6 +225,7 @@ export function init() {
 
 export function pause() {
   stop();
+  saveStats();
 }
 
 export function resume() {
