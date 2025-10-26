@@ -1,5 +1,6 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
+import { emitModuleState } from '../events.js';
 
 const REFRESH_MS = 2000;
 const CHECK_MS = 2000;
@@ -9,6 +10,7 @@ const TARGET_ALIAS = '目标马';
 const LS_STATS = 'rm_stats_v1';
 const LS_PENDING_RETURN = 'rm_pending_return_v1';
 const LS_ENABLED = 'rm_enabled_v1';
+const MODULE_ID = 'rm';
 
 let enabled = loadBoolean(LS_ENABLED);
 let refreshCount = 0;
@@ -31,6 +33,19 @@ function saveStats() {
   saveJSON(LS_STATS, { refreshCount, moveClickCount, lastTriggerTs });
 }
 
+function resetStats() {
+  refreshCount = 0;
+  moveClickCount = 0;
+  lastTriggerTs = null;
+  foundCount = 0;
+  saveStats();
+  updateUI();
+}
+
+function announceState() {
+  emitModuleState({ moduleId: MODULE_ID, enabled });
+}
+
 function setPendingReturn(value) {
   saveBoolean(LS_PENDING_RETURN, value);
 }
@@ -43,26 +58,52 @@ function mountUI() {
   const body = $('#rm-body');
   if (!body) return;
   body.innerHTML = `
-    <div class="kv"><span>状态</span><span id="rm-status">${
-      enabled ? '运行中' : '关闭中'
-    }</span></div>
-    <div class="kv"><span>刷新次数</span><span id="rm-refresh">0</span></div>
-    <div class="kv"><span>${TARGET_ALIAS} 出现(当前页)</span><span id="rm-found">0</span></div>
-    <div class="kv"><span>牵走次数</span><span id="rm-move">0</span></div>
-    <div class="kv"><span>上次触发</span><span id="rm-last">-</span></div>
+    <div class="kv"><span class="label" data-label="状态"></span><span
+        id="rm-status"
+        class="value state"
+        data-state="${enabled ? 'on' : 'off'}"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="刷新次数"></span><span
+        id="rm-refresh"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="${TARGET_ALIAS} 出现(当前页)"></span><span
+        id="rm-found"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="牵走次数"></span><span
+        id="rm-move"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="上次触发"></span><span
+        id="rm-last"
+        class="value"
+        data-value="-"
+      ></span></div>
   `;
   const toggle = $('#rm-toggle');
   if (toggle) {
     toggle.onclick = () => toggleEnabled();
   }
+  const reset = $('#rm-reset');
+  if (reset) {
+    reset.onclick = () => resetStats();
+  }
   updateUI();
 }
 
 function updateUI() {
-  safeText($('#rm-status'), enabled ? '运行中' : '关闭中');
+  const status = $('#rm-status');
+  if (status) {
+    status.dataset.state = enabled ? 'on' : 'off';
+  }
   const toggle = $('#rm-toggle');
   if (toggle) {
-    toggle.textContent = enabled ? '关闭' : '开启';
+    toggle.dataset.mode = enabled ? 'on' : 'off';
+    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   safeText($('#rm-refresh'), refreshCount);
   safeText($('#rm-found'), foundCount);
@@ -157,6 +198,7 @@ function enable() {
   startRefreshing();
   startChecking();
   updateUI();
+  announceState();
 }
 
 function disable() {
@@ -165,6 +207,7 @@ function disable() {
   stopRefreshing();
   stopChecking();
   updateUI();
+  announceState();
 }
 
 function toggleEnabled() {
@@ -178,6 +221,7 @@ function toggleEnabled() {
 export function init() {
   loadStats();
   mountUI();
+  announceState();
   if (!enabled) return;
   if (isPendingReturn()) {
     tryClickReturn();
