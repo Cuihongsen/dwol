@@ -53,6 +53,38 @@ function saveStats() {
   });
 }
 
+function refreshSeenLootSnapshot() {
+  seenLoot = new Set();
+  const text = document.body ? document.body.innerText : '';
+  if (!text) return;
+  LOOT_BLOCK_REGEX.lastIndex = 0;
+  const blocks = text.matchAll(LOOT_BLOCK_REGEX);
+  for (const block of blocks) {
+    const fullBlock = block[0] ? block[0].trim() : '';
+    if (!fullBlock || fullBlock.length <= 2) continue;
+    const entries = fullBlock
+      .slice(2)
+      .split(/[;；]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    for (const entry of entries) {
+      seenLoot.add(`捡到${entry}`);
+    }
+  }
+}
+
+function resetStats() {
+  scanCount = 0;
+  clickCount = 0;
+  lastClickAt = 0;
+  lastTarget = '-';
+  targetBreakdown = {};
+  lootTotals = {};
+  refreshSeenLootSnapshot();
+  saveStats();
+  updateUI();
+}
+
 function recordScan() {
   scanCount += 1;
   saveStats();
@@ -161,6 +193,10 @@ function mountUI() {
   const toggle = $('#jyg-toggle');
   if (toggle) {
     toggle.onclick = () => toggleEnabled();
+  }
+  const reset = $('#jyg-reset');
+  if (reset) {
+    reset.onclick = () => resetStats();
   }
   updateUI();
 }

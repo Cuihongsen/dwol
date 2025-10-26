@@ -31,6 +31,15 @@ function saveStats() {
   saveJSON(LS_STATS, { refreshCount, moveClickCount, lastTriggerTs });
 }
 
+function resetStats() {
+  refreshCount = 0;
+  moveClickCount = 0;
+  lastTriggerTs = null;
+  foundCount = 0;
+  saveStats();
+  updateUI();
+}
+
 function setPendingReturn(value) {
   saveBoolean(LS_PENDING_RETURN, value);
 }
@@ -72,6 +81,10 @@ function mountUI() {
   const toggle = $('#rm-toggle');
   if (toggle) {
     toggle.onclick = () => toggleEnabled();
+  }
+  const reset = $('#rm-reset');
+  if (reset) {
+    reset.onclick = () => resetStats();
   }
   updateUI();
 }
