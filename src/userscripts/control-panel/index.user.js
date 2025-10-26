@@ -306,7 +306,10 @@
     stopChecking();
   }
   function resume() {
-    if (enabled) {
+    if (!enabled) return;
+    if (isPendingReturn()) {
+      tryClickReturn();
+    } else {
       startRefreshing();
       startChecking();
     }

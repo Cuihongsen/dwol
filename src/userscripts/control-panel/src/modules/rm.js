@@ -64,7 +64,6 @@ function mountUI() {
   body.appendChild(createRow(`${TARGET_ALIAS} 出现(当前页)`, 'rm-found'));
   body.appendChild(createRow('牵走次数', 'rm-move'));
   body.appendChild(createRow('上次触发', 'rm-last'));
-
   const toggle = $('#rm-toggle');
   if (toggle) {
     toggle.onclick = () => toggleEnabled();
@@ -212,7 +211,10 @@ export function pause() {
 }
 
 export function resume() {
-  if (enabled) {
+  if (!enabled) return;
+  if (isPendingReturn()) {
+    tryClickReturn();
+  } else {
     startRefreshing();
     startChecking();
   }
