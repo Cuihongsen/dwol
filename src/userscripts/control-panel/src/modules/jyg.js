@@ -45,6 +45,7 @@ function updateUI() {
   const toggle = $('#jyg-toggle');
   if (toggle) {
     toggle.dataset.mode = enabled ? 'on' : 'off';
+    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   safeText($('#jyg-clicks'), clickCount);
   safeText($('#jyg-last'), formatTime(lastClickAt));

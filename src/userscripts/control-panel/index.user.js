@@ -33,7 +33,21 @@
   var PANEL_STYLE_ID = "um-style";
   var PANEL_ID = "um-panel";
   var PANEL_STYLE = `
-#um-panel{position:fixed;right:18px;bottom:18px;width:340px;z-index:2147483647;font:13px/1.5 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#e2e8f0;background:radial-gradient(circle at 20% -10%,rgba(56,189,248,.32),transparent 55%),linear-gradient(135deg,rgba(15,23,42,.94),rgba(30,41,59,.92));border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 28px 60px rgba(15,23,42,.55);backdrop-filter:blur(18px);overflow:hidden}
+:root{color-scheme:dark}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 20%,rgba(30,64,175,.45),transparent 55%),#0b1220;color:#e2e8f0;font:14px/1.8 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
+body>*:not(#um-panel){max-width:960px;margin-inline:auto;padding:0 32px}
+main,section,article{display:block;margin-inline:auto;max-width:960px}
+p{margin:16px auto;max-width:72ch}
+li{max-width:72ch}
+a{color:#38bdf8;text-decoration:none}
+a:hover{color:#c084fc}
+pre,code{font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace}
+pre{background:rgba(15,23,42,.65);border:1px solid rgba(148,163,184,.22);border-radius:14px;padding:18px;overflow:auto;color:#e2e8f0}
+table{width:100%;border-collapse:collapse;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.18);border-radius:14px;overflow:hidden}
+th,td{padding:12px 16px;border-bottom:1px solid rgba(148,163,184,.12);text-align:left}
+th{color:#f8fafc;font-weight:600;background:rgba(51,65,85,.55)}
+tr:last-child td{border-bottom:none}
+#um-panel{position:fixed;right:18px;bottom:18px;width:340px;z-index:2147483647;font:13px/1.6 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#e2e8f0;background:radial-gradient(circle at 20% -10%,rgba(56,189,248,.32),transparent 55%),linear-gradient(135deg,rgba(15,23,42,.94),rgba(30,41,59,.92));border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 28px 60px rgba(15,23,42,.55);backdrop-filter:blur(18px);overflow:hidden}
 #um-panel::after{content:'';position:absolute;inset:1px;border-radius:16px;pointer-events:none;background:linear-gradient(130deg,rgba(148,163,184,.18),rgba(96,165,250,.08) 35%,transparent 65%)}
 #um-panel .sec{position:relative;border-top:1px solid rgba(148,163,184,.14)}
 #um-panel .sec:first-child{border-top:none}
@@ -67,6 +81,8 @@
     toggle.id = `${idPrefix}-toggle`;
     toggle.type = "button";
     toggle.dataset.mode = "off";
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.setAttribute("aria-label", `${title} \u6A21\u5757\u5F00\u5173`);
     header.appendChild(label);
     header.appendChild(toggle);
     const body = document.createElement("div");
@@ -199,6 +215,7 @@
     const toggle = $("#rm-toggle");
     if (toggle) {
       toggle.dataset.mode = enabled ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled ? "true" : "false");
     }
     safeText($("#rm-refresh"), refreshCount);
     safeText($("#rm-found"), foundCount);
@@ -372,6 +389,7 @@
     const toggle = $("#jyg-toggle");
     if (toggle) {
       toggle.dataset.mode = enabled2 ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled2 ? "true" : "false");
     }
     safeText($("#jyg-clicks"), clickCount);
     safeText($("#jyg-last"), formatTime(lastClickAt));

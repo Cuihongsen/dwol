@@ -84,6 +84,7 @@ function updateUI() {
   const toggle = $('#rm-toggle');
   if (toggle) {
     toggle.dataset.mode = enabled ? 'on' : 'off';
+    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
   safeText($('#rm-refresh'), refreshCount);
   safeText($('#rm-found'), foundCount);
