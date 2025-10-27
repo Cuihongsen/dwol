@@ -1,10 +1,11 @@
-import { ensurePanel, injectStyle } from './panel.js';
+import { ensurePanel } from './panel.js';
 import * as RM from './modules/rm.js';
 import * as JYG from './modules/jyg.js';
 import { startWatchdog } from './watchdog.js';
+import { injectPanelTheme } from './styles/injector.js';
 
 function init() {
-  injectStyle();
+  injectPanelTheme();
   ensurePanel();
   RM.init();
   JYG.init();

@@ -264,41 +264,35 @@ function mountUI() {
   const body = $('#jyg-body');
   if (!body) return;
   body.innerHTML = `
-    <div class="kv"><span class="label" data-label="状态"></span><span
+    <div class="kv"><span class="label">状态</span><span
         id="jyg-status"
         class="value state"
         data-state="${enabled ? 'on' : 'off'}"
       ></span></div>
-    <div class="kv"><span class="label" data-label="点击次数"></span><span
+    <div class="kv"><span class="label">点击次数</span><span
         id="jyg-clicks"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="上次目标"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">上次目标</span><span
         id="jyg-last-target"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="上次点击"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">上次点击</span><span
         id="jyg-last"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="轮询次数"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">轮询次数</span><span
         id="jyg-scans"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="目标统计"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">目标统计</span><span
         id="jyg-targets"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="掉落统计"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">掉落统计</span><span
         id="jyg-loot"
         class="value"
-        data-value="-"
-      ></span></div>
+      >-</span></div>
   `;
   const toggle = $('#jyg-toggle');
   if (toggle) {
@@ -341,11 +335,13 @@ function updateUI() {
   const status = $('#jyg-status');
   if (status) {
     status.dataset.state = enabled ? 'on' : 'off';
+    status.textContent = enabled ? '运行中' : '关闭中';
   }
   const toggle = $('#jyg-toggle');
   if (toggle) {
     toggle.dataset.mode = enabled ? 'on' : 'off';
     toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    toggle.textContent = enabled ? '关闭' : '开启';
   }
   safeText($('#jyg-clicks'), clickCount);
   safeText($('#jyg-last-target'), lastTarget || '-');

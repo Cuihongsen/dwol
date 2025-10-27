@@ -53,7 +53,7 @@
     window.dispatchEvent(new CustomEvent(MODULE_STATE_EVENT, { detail }));
   }
 
-  // src/userscripts/control-panel/src/panel.js
+  // src/userscripts/control-panel/src/constants.js
   var PANEL_STYLE_ID = "um-style";
   var PANEL_ID = "um-panel";
   var LS_ACTIVE_MODULE = "um_active_module_v1";
@@ -61,58 +61,12 @@
     { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
     { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" }
   ];
+
+  // src/userscripts/control-panel/src/panel.js
   var navButtons = [];
   var sections = [];
   var currentActiveModule = null;
   var listenersBound = false;
-  var PANEL_STYLE = `
-:root{color-scheme:light}
-body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%);color:#1f2937;font:13px/1.7 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
-body>*:not(#um-panel){max-width:920px;margin-inline:auto;padding:0 24px}
-main,section,article{display:block;margin-inline:auto;max-width:920px}
-p{margin:14px auto;max-width:70ch}
-li{max-width:70ch}
-a{color:#2563eb;text-decoration:none}
-a:hover{color:#7c3aed}
-pre,code{font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace}
-pre{background:#f1f5f9;border:1px solid #cbd5f5;border-radius:12px;padding:16px;overflow:auto;color:#0f172a}
-table{width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #d0d7ea;border-radius:12px;overflow:hidden}
-th,td{padding:10px 14px;border-bottom:1px solid #e2e8f0;text-align:left}
-th{color:#0f172a;font-weight:600;background:#e2e8f0}
-tr:last-child td{border-bottom:none}
-#um-panel{position:fixed;right:16px;bottom:16px;width:248px;z-index:2147483647;font:11px/1.55 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#0f172a;background:linear-gradient(140deg,#ffffff 0%,#eff4fb 100%);border:1px solid rgba(148,163,184,.38);border-radius:18px;box-shadow:0 18px 46px rgba(15,23,42,.16);backdrop-filter:blur(10px);overflow:hidden}
-#um-panel::after{content:'';position:absolute;inset:1px;border-radius:16px;pointer-events:none;background:linear-gradient(125deg,rgba(255,255,255,.75),rgba(148,163,184,.14) 48%,transparent 78%)}
-#um-panel .nav{display:flex;gap:6px;padding:10px 12px 6px;background:rgba(241,245,249,.85);backdrop-filter:blur(8px)}
-#um-panel .nav button{flex:1;position:relative;border:none;border-radius:12px;padding:8px 0;background:transparent;cursor:pointer;transition:all .18s ease;min-width:0}
-#um-panel .nav button::before{content:attr(data-label);display:block;font-weight:600;letter-spacing:.06em;color:#475569}
-#um-panel .nav button[data-active="true"]{background:linear-gradient(135deg,#dbeafe,#e0f2fe);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 18px rgba(59,130,246,.18)}
-#um-panel .nav button[data-active="true"]::before{color:#1d4ed8}
-#um-panel .nav button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
-#um-panel .modules{padding:4px 12px 14px}
-#um-panel .module{display:none}
-#um-panel .module[data-active="true"]{display:block}
-#um-panel .hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-#um-panel .hdr b{position:relative;font-weight:600;letter-spacing:.04em;flex:1}
-#um-panel .hdr b::before{content:attr(data-label);display:block;color:#1d4ed8;text-shadow:0 1px 6px rgba(148,163,184,.24)}
-#um-panel .hdr .actions{display:flex;align-items:center;gap:6px}
-#um-panel .hdr .actions button{position:relative;min-width:64px;padding:4px 12px;border-radius:999px;border:1px solid rgba(148,163,184,.45);background:linear-gradient(135deg,#f8fafc,#e2e8f0);box-shadow:inset 0 1px 0 rgba(255,255,255,.9);cursor:pointer;color:#1e293b;transition:all .18s ease;font-size:10px;letter-spacing:.08em}
-#um-panel .hdr .actions button:hover{border-color:rgba(59,130,246,.65);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 12px rgba(59,130,246,.16);transform:translateY(-1px)}
-#um-panel .hdr .actions button:active{transform:translateY(0)}
-#um-panel .hdr .actions button:focus-visible{outline:2px solid #38bdf8;outline-offset:1px}
-#um-panel .hdr .actions button::before{content:'';font-weight:600;color:#1d4ed8}
-#um-panel .hdr .actions button[data-role="toggle"][data-mode="on"]::before{content:'\u5173\u95ED'}
-#um-panel .hdr .actions button[data-role="toggle"][data-mode="off"]::before{content:'\u5F00\u542F'}
-#um-panel .hdr .actions button[data-role="reset"]{min-width:72px;background:linear-gradient(135deg,#fef9c3,#fef3c7);border-color:rgba(250,204,21,.6);color:#92400e}
-#um-panel .hdr .actions button[data-role="reset"]::before{content:'\u6E05\u7A7A\u7EDF\u8BA1'}
-#um-panel .body{padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(248,250,252,.9);border:1px solid rgba(148,163,184,.28);border-radius:12px}
-#um-panel .kv{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:2px 0}
-#um-panel .kv .label::before{content:attr(data-label);color:#475569;font-size:10px;letter-spacing:.04em;white-space:nowrap}
-#um-panel .kv .value{position:relative;font-variant-numeric:tabular-nums;text-align:right}
-#um-panel .kv .value::before{content:attr(data-value);color:#0f172a;font-size:11px}
-#um-panel .kv .state[data-state="on"]::before{content:'\u8FD0\u884C\u4E2D';color:#15803d;font-weight:600;text-shadow:0 0 8px rgba(74,222,128,.35)}
-#um-panel .kv .state[data-state="off"]::before{content:'\u5173\u95ED\u4E2D';color:#dc2626;font-weight:600;text-shadow:0 0 6px rgba(248,113,113,.3)}
-#um-panel .hint::before{content:attr(data-label);color:#64748b;font-size:9px;letter-spacing:.04em}
-`;
   function buildSection(title, idPrefix) {
     const sec = document.createElement("section");
     sec.className = "module";
@@ -120,31 +74,41 @@ tr:last-child td{border-bottom:none}
     const header = document.createElement("div");
     header.className = "hdr";
     const label = document.createElement("b");
-    label.setAttribute("data-label", title);
+    label.textContent = title;
     const actions = document.createElement("div");
     actions.className = "actions";
-    const reset = document.createElement("button");
-    reset.id = `${idPrefix}-reset`;
-    reset.type = "button";
-    reset.dataset.role = "reset";
-    reset.setAttribute("aria-label", `${title} \u7EDF\u8BA1\u6E05\u7A7A`);
     const toggle = document.createElement("button");
     toggle.id = `${idPrefix}-toggle`;
     toggle.type = "button";
     toggle.dataset.mode = "off";
     toggle.dataset.role = "toggle";
+    toggle.textContent = "\u5F00\u542F";
     toggle.setAttribute("aria-pressed", "false");
     toggle.setAttribute("aria-label", `${title} \u6A21\u5757\u5F00\u5173`);
-    actions.appendChild(toggle);
-    actions.appendChild(reset);
-    header.appendChild(label);
-    header.appendChild(actions);
+    const reset = document.createElement("button");
+    reset.id = `${idPrefix}-reset`;
+    reset.type = "button";
+    reset.dataset.role = "reset";
+    reset.textContent = "\u6E05\u7A7A\u7EDF\u8BA1";
+    reset.setAttribute("aria-label", `${title} \u7EDF\u8BA1\u6E05\u7A7A`);
+    actions.append(toggle, reset);
+    header.append(label, actions);
     const body = document.createElement("div");
     body.className = "body";
     body.id = `${idPrefix}-body`;
-    sec.appendChild(header);
-    sec.appendChild(body);
+    sec.append(header, body);
     return sec;
+  }
+  function createNavButton(mod, isActive) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.module = mod.id;
+    button.dataset.active = isActive ? "true" : "false";
+    button.textContent = mod.title;
+    button.setAttribute("aria-label", `${mod.title} \u9762\u677F`);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    button.addEventListener("click", () => focusModule(mod.id));
+    return button;
   }
   function pickEnabledModule(excludeId = null) {
     for (const mod of MODULES) {
@@ -205,13 +169,6 @@ tr:last-child td{border-bottom:none}
     });
     listenersBound = true;
   }
-  function injectStyle() {
-    if ($(`#${PANEL_STYLE_ID}`)) return;
-    const style = document.createElement("style");
-    style.id = PANEL_STYLE_ID;
-    style.textContent = PANEL_STYLE;
-    document.head.appendChild(style);
-  }
   function ensurePanel() {
     bindModuleStateListener();
     if ($(`#${PANEL_ID}`)) {
@@ -230,15 +187,8 @@ tr:last-child td{border-bottom:none}
     navButtons = [];
     sections = [];
     for (const [index, mod] of MODULES.entries()) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.module = mod.id;
-      button.dataset.label = mod.title;
-      button.setAttribute("aria-label", `${mod.title} \u9762\u677F`);
-      button.setAttribute("aria-pressed", index === 0 ? "true" : "false");
-      button.dataset.active = index === 0 ? "true" : "false";
-      button.addEventListener("click", () => focusModule(mod.id));
-      nav.appendChild(button);
+      const button = createNavButton(mod, index === 0);
+      nav.append(button);
       navButtons.push(button);
       const section = buildSection(mod.title, mod.id);
       if (index === 0) {
@@ -247,12 +197,11 @@ tr:last-child td{border-bottom:none}
         section.dataset.active = "false";
         section.setAttribute("hidden", "");
       }
-      modulesWrap.appendChild(section);
+      modulesWrap.append(section);
       sections.push(section);
     }
-    panel.appendChild(nav);
-    panel.appendChild(modulesWrap);
-    document.body.appendChild(panel);
+    panel.append(nav, modulesWrap);
+    document.body.append(panel);
     const initial = chooseInitialModule();
     if (initial) {
       activate(initial, { persist: false });
@@ -338,31 +287,27 @@ tr:last-child td{border-bottom:none}
     const body = $("#rm-body");
     if (!body) return;
     body.innerHTML = `
-    <div class="kv"><span class="label" data-label="\u72B6\u6001"></span><span
+    <div class="kv"><span class="label">\u72B6\u6001</span><span
         id="rm-status"
         class="value state"
         data-state="${enabled ? "on" : "off"}"
       ></span></div>
-    <div class="kv"><span class="label" data-label="\u5237\u65B0\u6B21\u6570"></span><span
+    <div class="kv"><span class="label">\u5237\u65B0\u6B21\u6570</span><span
         id="rm-refresh"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="${TARGET_ALIAS} \u51FA\u73B0(\u5F53\u524D\u9875)"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">${TARGET_ALIAS} \u51FA\u73B0(\u5F53\u524D\u9875)</span><span
         id="rm-found"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u7275\u8D70\u6B21\u6570"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">\u7275\u8D70\u6B21\u6570</span><span
         id="rm-move"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u89E6\u53D1"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">\u4E0A\u6B21\u89E6\u53D1</span><span
         id="rm-last"
         class="value"
-        data-value="-"
-      ></span></div>
+      >-</span></div>
   `;
     const toggle = $("#rm-toggle");
     if (toggle) {
@@ -378,11 +323,13 @@ tr:last-child td{border-bottom:none}
     const status = $("#rm-status");
     if (status) {
       status.dataset.state = enabled ? "on" : "off";
+      status.textContent = enabled ? "\u8FD0\u884C\u4E2D" : "\u5173\u95ED\u4E2D";
     }
     const toggle = $("#rm-toggle");
     if (toggle) {
       toggle.dataset.mode = enabled ? "on" : "off";
       toggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+      toggle.textContent = enabled ? "\u5173\u95ED" : "\u5F00\u542F";
     }
     safeText($("#rm-refresh"), refreshCount);
     safeText($("#rm-found"), foundCount);
@@ -1535,41 +1482,35 @@ tr:last-child td{border-bottom:none}
     const body = $("#jyg-body");
     if (!body) return;
     body.innerHTML = `
-    <div class="kv"><span class="label" data-label="\u72B6\u6001"></span><span
+    <div class="kv"><span class="label">\u72B6\u6001</span><span
         id="jyg-status"
         class="value state"
         data-state="${enabled2 ? "on" : "off"}"
       ></span></div>
-    <div class="kv"><span class="label" data-label="\u70B9\u51FB\u6B21\u6570"></span><span
+    <div class="kv"><span class="label">\u70B9\u51FB\u6B21\u6570</span><span
         id="jyg-clicks"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u76EE\u6807"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">\u4E0A\u6B21\u76EE\u6807</span><span
         id="jyg-last-target"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u70B9\u51FB"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">\u4E0A\u6B21\u70B9\u51FB</span><span
         id="jyg-last"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u8F6E\u8BE2\u6B21\u6570"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">\u8F6E\u8BE2\u6B21\u6570</span><span
         id="jyg-scans"
         class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u76EE\u6807\u7EDF\u8BA1"></span><span
+      >0</span></div>
+    <div class="kv"><span class="label">\u76EE\u6807\u7EDF\u8BA1</span><span
         id="jyg-targets"
         class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u6389\u843D\u7EDF\u8BA1"></span><span
+      >-</span></div>
+    <div class="kv"><span class="label">\u6389\u843D\u7EDF\u8BA1</span><span
         id="jyg-loot"
         class="value"
-        data-value="-"
-      ></span></div>
+      >-</span></div>
   `;
     const toggle = $("#jyg-toggle");
     if (toggle) {
@@ -1610,11 +1551,13 @@ tr:last-child td{border-bottom:none}
     const status = $("#jyg-status");
     if (status) {
       status.dataset.state = enabled2 ? "on" : "off";
+      status.textContent = enabled2 ? "\u8FD0\u884C\u4E2D" : "\u5173\u95ED\u4E2D";
     }
     const toggle = $("#jyg-toggle");
     if (toggle) {
       toggle.dataset.mode = enabled2 ? "on" : "off";
       toggle.setAttribute("aria-pressed", enabled2 ? "true" : "false");
+      toggle.textContent = enabled2 ? "\u5173\u95ED" : "\u5F00\u542F";
     }
     safeText($("#jyg-clicks"), clickCount);
     safeText($("#jyg-last-target"), lastTarget || "-");
@@ -1789,9 +1732,251 @@ tr:last-child td{border-bottom:none}
     }, WATCH_INTERVAL_MS);
   }
 
+  // src/userscripts/control-panel/src/styles/theme.js
+  var PANEL_THEME = `
+:root {
+  color-scheme: light;
+}
+
+#um-panel,
+#um-panel * {
+  box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, 'PingFang SC', sans-serif;
+}
+
+#um-panel {
+  --um-color-text: #1f2937;
+  --um-color-text-strong: #0f172a;
+  --um-color-muted: #64748b;
+  --um-color-bg: rgba(255, 255, 255, 0.96);
+  --um-color-body-bg: rgba(248, 250, 252, 0.95);
+  --um-color-soft-bg: rgba(241, 245, 249, 0.85);
+  --um-color-hover-bg: rgba(226, 232, 240, 0.9);
+  --um-color-border: rgba(148, 163, 184, 0.35);
+  --um-color-border-soft: rgba(148, 163, 184, 0.24);
+  --um-color-border-strong: rgba(148, 163, 184, 0.5);
+  --um-color-border-strong-hover: rgba(59, 130, 246, 0.55);
+  --um-color-accent-soft: linear-gradient(135deg, #dbeafe, #e0f2fe);
+  --um-color-accent-strong: #1d4ed8;
+  --um-color-focus: #38bdf8;
+  --um-color-surface: rgba(255, 255, 255, 0.94);
+  --um-color-success: #15803d;
+  --um-color-danger: #dc2626;
+  --um-color-warn-soft: linear-gradient(135deg, #fef9c3, #fef3c7);
+  --um-color-warn-border: rgba(250, 204, 21, 0.6);
+  --um-color-warn-strong: #92400e;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 260px;
+  z-index: 2147483647;
+  color: var(--um-color-text);
+  background: var(--um-color-bg);
+  border-radius: 16px;
+  border: 1px solid var(--um-color-border);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+#um-panel .nav {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--um-color-soft-bg);
+}
+
+#um-panel .nav button {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--um-color-muted);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#um-panel .nav button:hover {
+  background: var(--um-color-hover-bg);
+  color: var(--um-color-text);
+}
+
+#um-panel .nav button[data-active='true'] {
+  background: var(--um-color-accent-soft);
+  color: var(--um-color-accent-strong);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.15);
+}
+
+#um-panel .nav button:focus-visible,
+#um-panel .hdr .actions button:focus-visible {
+  outline: 2px solid var(--um-color-focus);
+  outline-offset: 2px;
+}
+
+#um-panel .modules {
+  padding: 12px 16px 16px;
+  background: var(--um-color-body-bg);
+}
+
+#um-panel .module {
+  display: none;
+}
+
+#um-panel .module[data-active='true'] {
+  display: block;
+}
+
+#um-panel .hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#um-panel .hdr b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--um-color-text-strong);
+}
+
+#um-panel .hdr .actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#um-panel .hdr .actions button {
+  border-radius: 999px;
+  border: 1px solid var(--um-color-border-strong);
+  background: var(--um-color-surface);
+  padding: 4px 14px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--um-color-text);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+#um-panel .hdr .actions button:hover {
+  background: var(--um-color-hover-bg);
+  border-color: var(--um-color-border-strong-hover);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.35);
+  transform: translateY(-1px);
+}
+
+#um-panel .hdr .actions button:active {
+  transform: translateY(0);
+}
+
+#um-panel .hdr .actions button[data-role='reset'] {
+  background: var(--um-color-warn-soft);
+  color: var(--um-color-warn-strong);
+  border-color: var(--um-color-warn-border);
+}
+
+#um-panel .hdr .actions button[data-role='reset']:hover {
+  box-shadow: 0 6px 14px rgba(248, 113, 113, 0.25);
+}
+
+#um-panel .body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--um-color-surface);
+  border-radius: 12px;
+  border: 1px solid var(--um-color-border-soft);
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#um-panel .kv {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--um-color-text);
+}
+
+#um-panel .kv .label {
+  color: var(--um-color-muted);
+}
+
+#um-panel .kv .value {
+  min-width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--um-color-text-strong);
+}
+
+#um-panel .kv .state[data-state='on'] {
+  color: var(--um-color-success);
+  font-weight: 600;
+}
+
+#um-panel .kv .state[data-state='off'] {
+  color: var(--um-color-danger);
+  font-weight: 600;
+}
+
+#um-panel .hint {
+  font-size: 10px;
+  color: var(--um-color-muted);
+  line-height: 1.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  #um-panel {
+    color-scheme: dark;
+    --um-color-text: #e2e8f0;
+    --um-color-text-strong: #f8fafc;
+    --um-color-muted: #94a3b8;
+    --um-color-bg: rgba(15, 23, 42, 0.88);
+    --um-color-body-bg: rgba(15, 23, 42, 0.78);
+    --um-color-soft-bg: rgba(30, 41, 59, 0.75);
+    --um-color-hover-bg: rgba(51, 65, 85, 0.88);
+    --um-color-border: rgba(148, 163, 184, 0.45);
+    --um-color-border-soft: rgba(148, 163, 184, 0.32);
+    --um-color-border-strong: rgba(148, 163, 184, 0.6);
+    --um-color-border-strong-hover: rgba(96, 165, 250, 0.75);
+    --um-color-accent-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.38), rgba(14, 165, 233, 0.38));
+    --um-color-accent-strong: #93c5fd;
+    --um-color-surface: rgba(30, 41, 59, 0.9);
+    --um-color-success: #4ade80;
+    --um-color-danger: #f87171;
+    --um-color-warn-soft: linear-gradient(135deg, rgba(251, 191, 36, 0.35), rgba(251, 191, 36, 0.22));
+    --um-color-warn-border: rgba(251, 191, 36, 0.6);
+    --um-color-warn-strong: #fcd34d;
+  }
+
+  #um-panel .body {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  #um-panel .hdr .actions button[data-role='reset']:hover {
+    box-shadow: 0 6px 14px rgba(251, 191, 36, 0.25);
+  }
+}
+`;
+
+  // src/userscripts/control-panel/src/styles/injector.js
+  function injectPanelTheme() {
+    if ($(`#${PANEL_STYLE_ID}`)) return;
+    const style = document.createElement("style");
+    style.id = PANEL_STYLE_ID;
+    style.textContent = PANEL_THEME;
+    document.head.append(style);
+  }
+
   // src/userscripts/control-panel/src/index.js
   function init3() {
-    injectStyle();
+    injectPanelTheme();
     ensurePanel();
     init();
     init2();
