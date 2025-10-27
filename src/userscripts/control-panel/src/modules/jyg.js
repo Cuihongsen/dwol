@@ -1,6 +1,12 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 import { emitModuleState } from '../events.js';
+import {
+  createNavigator,
+  computeLocationKey,
+  canonicalizeHref,
+  parseDirectionalLabel,
+} from './jyg/navigation.js';
 
 const SCAN_MS = 400;
 const CLICK_COOLDOWN_MS = 1000;
@@ -12,6 +18,8 @@ const LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
 
 const MODULE_ID = 'jyg';
 
+const navigator = createNavigator();
+
 let enabled = loadBoolean(LS_ENABLED);
 let scanCount = 0;
 let clickCount = 0;
@@ -21,6 +29,99 @@ let targetBreakdown = {};
 let lootTotals = {};
 let seenLoot = new Set();
 let scanTimer = null;
+let lastTelemetryDigest = null;
+
+function extractLocationHint() {
+  const candidates = [
+    document.querySelector('#ly_map strong'),
+    document.querySelector('#ly_map b'),
+    document.querySelector('#ly_map'),
+  ];
+  for (const node of candidates) {
+    const text = node && node.textContent ? node.textContent.trim() : '';
+    if (text) {
+      return text.slice(0, 80);
+    }
+  }
+  const body = document.body ? document.body.innerText : '';
+  if (!body) return '';
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    if (line.includes('景阳岗') || line.includes('树林')) {
+      return line.slice(0, 80);
+    }
+  }
+  return lines.length ? lines[0].slice(0, 80) : '';
+}
+
+function buildNavigationContext(anchors) {
+  const movement = [];
+  const attack = [];
+  const gather = [];
+  const misc = [];
+
+  for (const el of anchors) {
+    const text = el.textContent ? el.textContent.trim() : '';
+    if (!text) continue;
+    const rawHref = el.getAttribute('href') || '';
+    const href = canonicalizeHref(rawHref);
+    const { direction, label } = parseDirectionalLabel(text);
+    const normalizedLabel = label || text;
+    const base = { el, text, direction, label: normalizedLabel, href };
+
+    if (text.includes('攻击景阳岗')) {
+      attack.push({ ...base, key: `attack:${href || normalizedLabel}` });
+      continue;
+    }
+    if (!text.includes('攻击') && text.includes('景阳岗大虫')) {
+      attack.push({ ...base, key: `boss:${href || normalizedLabel}` });
+      continue;
+    }
+    if (normalizedLabel.includes('树林')) {
+      const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
+      movement.push({ ...base, key });
+      continue;
+    }
+    if (text.includes('灵芝')) {
+      gather.push({ ...base, key: `loot:${href || normalizedLabel}` });
+      continue;
+    }
+    if (text.includes('返回游戏')) {
+      misc.push({ ...base, key: `return:${href || normalizedLabel}` });
+      continue;
+    }
+  }
+
+  const hint = extractLocationHint();
+  const baseLocationKey = computeLocationKey(movement, hint);
+
+  return {
+    allAnchors: anchors,
+    movement,
+    attack,
+    gather,
+    misc,
+    hint,
+    baseLocationKey,
+    locationKey: baseLocationKey,
+  };
+}
+
+function handleLocationContext(context) {
+  const { baseLocationKey, movement, hint } = context;
+  const resolvedKey = navigator.handleContext({ baseLocationKey, movement, hint });
+  context.locationKey = resolvedKey;
+}
+
+function selectNavigationMove(context) {
+  return navigator.selectNavigationMove({
+    movement: context.movement,
+    locationKey: context.locationKey,
+  });
+}
 
 function loadStats() {
   let stats = loadJSON(LS_STATS);
@@ -90,6 +191,8 @@ function resetStats() {
   refreshSeenLootSnapshot();
   saveStats();
   updateUI();
+  navigator.resetRuntime();
+  lastTelemetryDigest = null;
 }
 
 function recordScan() {
@@ -208,6 +311,32 @@ function mountUI() {
   updateUI();
 }
 
+function logTelemetry(telemetry) {
+  if (!telemetry) return;
+  const snapshot = JSON.stringify({
+    key: telemetry.currentLocationKey || null,
+    location: telemetry.locationLabel || '-',
+    directions: telemetry.directionSummary || '-',
+    stack: telemetry.stackSummary || '-',
+    pending: telemetry.pendingAction || '-',
+    route: telemetry.plannedRoute || '-',
+    nodes: telemetry.locationCount || 0,
+  });
+  if (snapshot === lastTelemetryDigest) {
+    return;
+  }
+  lastTelemetryDigest = snapshot;
+  console.info('[JYG] 导航遥测', {
+    key: telemetry.currentLocationKey || null,
+    location: telemetry.locationLabel || '-',
+    directions: telemetry.directionSummary || '-',
+    stack: telemetry.stackSummary || '-',
+    pending: telemetry.pendingAction || '-',
+    route: telemetry.plannedRoute || '-',
+    nodes: telemetry.locationCount || 0,
+  });
+}
+
 function updateUI() {
   const status = $('#jyg-status');
   if (status) {
@@ -224,9 +353,12 @@ function updateUI() {
   safeText($('#jyg-scans'), scanCount);
   safeText($('#jyg-targets'), formatBreakdown());
   safeText($('#jyg-loot'), formatLoot());
+  const telemetry = navigator.getTelemetry();
+  logTelemetry(telemetry);
 }
 
-function pickTarget(anchors) {
+function pickTarget(context) {
+  const anchors = context.allAnchors;
   const byExact = (txt) =>
     anchors.find((a) => a.textContent && a.textContent.trim() === txt);
   const byIncludes = (kw) =>
@@ -235,36 +367,65 @@ function pickTarget(anchors) {
   const attempts = [
     () => {
       const el = byExact('攻击景阳岗小大虫');
-      return el ? { el, label: '攻击景阳岗小大虫' } : null;
-    },
-    () => {
-      const el = byExact('攻击景阳岗大虫');
-      return el ? { el, label: '攻击景阳岗大虫' } : null;
-    },
-    () => {
-      const el = byExact('景阳岗大虫');
-      return el ? { el, label: '景阳岗大虫' } : null;
-    },
-    () => {
-      const el = byExact('景阳岗小大虫');
-      return el ? { el, label: '景阳岗小大虫' } : null;
-    },
-    () => {
-      const arr = byIncludes('灵芝');
-      return arr && arr.length ? { el: arr[0], label: '灵芝' } : null;
-    },
-    () => {
-      const el = byExact('返回游戏');
-      return el ? { el, label: '返回游戏' } : null;
-    },
-    () => {
-      const woods = byIncludes('树林');
-      if (woods && woods.length) {
-        const idx = Math.floor(Math.random() * woods.length);
-        return { el: woods[idx], label: '树林(随机)' };
+      if (el) {
+        navigator.markMoveFailure();
+        return { el, label: '攻击景阳岗小大虫' };
       }
       return null;
     },
+    () => {
+      const el = byExact('攻击景阳岗大虫');
+      if (el) {
+        navigator.markMoveFailure();
+        return { el, label: '攻击景阳岗大虫' };
+      }
+      return null;
+    },
+    () => {
+      const el = byExact('景阳岗大虫');
+      if (el) {
+        navigator.markMoveFailure();
+        return { el, label: '景阳岗大虫' };
+      }
+      return null;
+    },
+    () => {
+      const el = byExact('景阳岗小大虫');
+      if (el) {
+        navigator.markMoveFailure();
+        return { el, label: '景阳岗小大虫' };
+      }
+      return null;
+    },
+    () => {
+      if (context.gather.length) {
+        const pick = context.gather[0];
+        navigator.markMoveFailure();
+        return { el: pick.el, label: pick.label };
+      }
+      const arr = byIncludes('灵芝');
+      if (arr && arr.length) {
+        navigator.markMoveFailure();
+        return { el: arr[0], label: '灵芝' };
+      }
+      return null;
+    },
+    () => {
+      if (context.misc.length) {
+        const ret = context.misc.find((item) => item.label.includes('返回'));
+        if (ret) {
+          navigator.markMoveFailure();
+          return { el: ret.el, label: ret.label };
+        }
+      }
+      const el = byExact('返回游戏');
+      if (el) {
+        navigator.markMoveFailure();
+        return { el, label: '返回游戏' };
+      }
+      return null;
+    },
+    () => selectNavigationMove(context),
   ];
 
   for (const attempt of attempts) {
@@ -283,7 +444,9 @@ function start() {
     if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
     const anchors = $$('a');
     if (!anchors.length) return;
-    const result = pickTarget(anchors);
+    const context = buildNavigationContext(anchors);
+    handleLocationContext(context);
+    const result = pickTarget(context);
     recordScan();
     if (result) {
       result.el.click();
@@ -315,6 +478,8 @@ function disable() {
   saveStats();
   updateUI();
   announceState();
+  navigator.resetRuntime();
+  lastTelemetryDigest = null;
 }
 
 function toggleEnabled() {
