@@ -73,6 +73,20 @@ function canonicalizeMovement(movement = []) {
   });
 }
 
+function computeMovementSignature(movement = []) {
+  if (!movement.length) return '';
+  const parts = movement
+    .map((link) => {
+      const direction = link.direction || '';
+      const href = link.href || '';
+      const label = link.label || '';
+      const key = link.key || '';
+      return `${direction}|${href}|${label}|${key}`;
+    })
+    .sort();
+  return parts.join('||');
+}
+
 function baseKeyIndex(baseKey) {
   return baseKey || '__no_key__';
 }
@@ -207,6 +221,7 @@ function loadState(storageKey) {
         baseKey: node.baseKey || null,
         baseHash: node.baseHash || null,
         lastHint: node.lastHint || null,
+        movementSignature: node.movementSignature || '',
         neighbors: toMap(node.neighbors),
         linkMeta,
         tried: toSet(node.tried),
@@ -227,6 +242,7 @@ function saveState(storageKey, state) {
       baseKey: node.baseKey,
       baseHash: node.baseHash,
       lastHint: node.lastHint,
+      movementSignature: node.movementSignature,
       neighbors: serializeMap(node.neighbors),
       linkMeta: serializeMap(node.linkMeta),
       tried: Array.from(node.tried.values()),
@@ -344,6 +360,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
         baseKey: null,
         baseHash: null,
         lastHint: null,
+        movementSignature: '',
         neighbors: new Map(),
         linkMeta: new Map(),
         tried: new Set(),
@@ -382,10 +399,11 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     return alias;
   };
 
-  const resolveLocationAlias = (baseKey, hint, fromKey, direction) => {
+  const resolveLocationAlias = (baseKey, hint, fromKey, direction, movement) => {
     if (!baseKey) return null;
     const indexKey = baseKeyIndex(baseKey);
     const aliasSet = state.aliasIndex.get(indexKey);
+    const movementSignature = computeMovementSignature(movement);
     if (fromKey && direction) {
       const fromNode = state.nodes.get(fromKey);
       if (fromNode) {
@@ -396,6 +414,20 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
         }
       }
     }
+    const pickByRecency = (candidates) => {
+      if (!candidates || !candidates.length) {
+        return null;
+      }
+      if (candidates.length === 1) {
+        return candidates[0];
+      }
+      const ordered = candidates
+        .map((alias) => state.nodes.get(alias))
+        .filter(Boolean)
+        .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+      return ordered.length ? ordered[0].alias : candidates[0];
+    };
+
     if (aliasSet && aliasSet.size) {
       if (fromKey && direction) {
         const opposite = DIRECTION_OPPOSITES[direction] || null;
@@ -409,12 +441,66 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
           }
         }
       }
+
+      let candidates = Array.from(aliasSet.values());
+      if (movementSignature) {
+        const signatureMatches = candidates.filter((alias) => {
+          const node = state.nodes.get(alias);
+          return node && node.movementSignature === movementSignature;
+        });
+        if (signatureMatches.length === 1) {
+          registerAlias(signatureMatches[0], baseKey);
+          if (logger && typeof logger.debug === 'function') {
+            logger.debug('[JYG] 通过出入口指纹校准位置', signatureMatches[0], {
+              baseHash: hashKey(baseKey),
+            });
+          }
+          return signatureMatches[0];
+        }
+        if (signatureMatches.length) {
+          candidates = signatureMatches;
+        }
+      }
+
+      if (hint) {
+        const hintMatches = candidates.filter((alias) => {
+          const node = state.nodes.get(alias);
+          return node && node.lastHint === hint;
+        });
+        if (hintMatches.length === 1) {
+          registerAlias(hintMatches[0], baseKey);
+          if (logger && typeof logger.debug === 'function') {
+            logger.debug('[JYG] 通过地点提示校准位置', hintMatches[0], {
+              baseHash: hashKey(baseKey),
+              hint,
+            });
+          }
+          return hintMatches[0];
+        }
+        if (hintMatches.length) {
+          candidates = hintMatches;
+        }
+      }
+
+      const resolved = pickByRecency(candidates);
+      if (resolved) {
+        registerAlias(resolved, baseKey);
+        if (logger && typeof logger.debug === 'function') {
+          logger.debug('[JYG] 通过最近访问记录推断位置', resolved, {
+            baseHash: hashKey(baseKey),
+          });
+        }
+        return resolved;
+      }
+
       if (logger && typeof logger.warn === 'function') {
         logger.warn('[JYG] 无法根据邻接关系解析位置，创建新别名', {
           baseHash: hashKey(baseKey),
           fromKey,
           direction,
           aliasCount: aliasSet.size,
+          movementSignature,
+          hint,
         });
       }
       return createAlias(baseKey, hint);
@@ -477,6 +563,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
   const calibrateNeighbors = (node, movement) => {
     const timestamp = now();
     const seen = new Set();
+    node.movementSignature = computeMovementSignature(movement);
     for (const link of movement) {
       seen.add(link.key);
       let meta = node.linkMeta.get(link.key);
@@ -523,7 +610,14 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     }
     const fromKey = pendingMove ? pendingMove.fromKey : null;
     const moveDirection = pendingMove ? pendingMove.direction : null;
-    const resolvedKey = resolveLocationAlias(baseLocationKey, hint, fromKey, moveDirection);
+    const normalizedMovement = canonicalizeMovement(movement);
+    const resolvedKey = resolveLocationAlias(
+      baseLocationKey,
+      hint,
+      fromKey,
+      moveDirection,
+      normalizedMovement
+    );
     if (!resolvedKey) {
       resetRuntime();
       return null;
@@ -544,7 +638,6 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       node.visits += 1;
     }
     node.lastSeenAt = timestamp;
-    const normalizedMovement = canonicalizeMovement(movement);
     calibrateNeighbors(node, normalizedMovement);
     if (pendingMove && pendingMove.fromKey) {
       const prevNode = ensureNode(pendingMove.fromKey);

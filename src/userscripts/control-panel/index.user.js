@@ -584,6 +584,17 @@ tr:last-child td{border-bottom:none}
       });
     });
   }
+  function computeMovementSignature(movement = []) {
+    if (!movement.length) return "";
+    const parts = movement.map((link) => {
+      const direction = link.direction || "";
+      const href = link.href || "";
+      const label = link.label || "";
+      const key = link.key || "";
+      return `${direction}|${href}|${label}|${key}`;
+    }).sort();
+    return parts.join("||");
+  }
   function baseKeyIndex(baseKey) {
     return baseKey || "__no_key__";
   }
@@ -701,6 +712,7 @@ tr:last-child td{border-bottom:none}
           baseKey: node.baseKey || null,
           baseHash: node.baseHash || null,
           lastHint: node.lastHint || null,
+          movementSignature: node.movementSignature || "",
           neighbors: toMap(node.neighbors),
           linkMeta,
           tried: toSet(node.tried),
@@ -720,6 +732,7 @@ tr:last-child td{border-bottom:none}
         baseKey: node.baseKey,
         baseHash: node.baseHash,
         lastHint: node.lastHint,
+        movementSignature: node.movementSignature,
         neighbors: serializeMap(node.neighbors),
         linkMeta: serializeMap(node.linkMeta),
         tried: Array.from(node.tried.values()),
@@ -817,6 +830,7 @@ tr:last-child td{border-bottom:none}
           baseKey: null,
           baseHash: null,
           lastHint: null,
+          movementSignature: "",
           neighbors: /* @__PURE__ */ new Map(),
           linkMeta: /* @__PURE__ */ new Map(),
           tried: /* @__PURE__ */ new Set(),
@@ -852,10 +866,11 @@ tr:last-child td{border-bottom:none}
       persist();
       return alias;
     };
-    const resolveLocationAlias = (baseKey, hint, fromKey, direction) => {
+    const resolveLocationAlias = (baseKey, hint, fromKey, direction, movement) => {
       if (!baseKey) return null;
       const indexKey = baseKeyIndex(baseKey);
       const aliasSet = state.aliasIndex.get(indexKey);
+      const movementSignature = computeMovementSignature(movement);
       if (fromKey && direction) {
         const fromNode = state.nodes.get(fromKey);
         if (fromNode) {
@@ -866,6 +881,16 @@ tr:last-child td{border-bottom:none}
           }
         }
       }
+      const pickByRecency = (candidates) => {
+        if (!candidates || !candidates.length) {
+          return null;
+        }
+        if (candidates.length === 1) {
+          return candidates[0];
+        }
+        const ordered = candidates.map((alias) => state.nodes.get(alias)).filter(Boolean).sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+        return ordered.length ? ordered[0].alias : candidates[0];
+      };
       if (aliasSet && aliasSet.size) {
         if (fromKey && direction) {
           const opposite = DIRECTION_OPPOSITES[direction] || null;
@@ -879,12 +904,62 @@ tr:last-child td{border-bottom:none}
             }
           }
         }
+        let candidates = Array.from(aliasSet.values());
+        if (movementSignature) {
+          const signatureMatches = candidates.filter((alias) => {
+            const node = state.nodes.get(alias);
+            return node && node.movementSignature === movementSignature;
+          });
+          if (signatureMatches.length === 1) {
+            registerAlias(signatureMatches[0], baseKey);
+            if (logger && typeof logger.debug === "function") {
+              logger.debug("[JYG] \u901A\u8FC7\u51FA\u5165\u53E3\u6307\u7EB9\u6821\u51C6\u4F4D\u7F6E", signatureMatches[0], {
+                baseHash: hashKey(baseKey)
+              });
+            }
+            return signatureMatches[0];
+          }
+          if (signatureMatches.length) {
+            candidates = signatureMatches;
+          }
+        }
+        if (hint) {
+          const hintMatches = candidates.filter((alias) => {
+            const node = state.nodes.get(alias);
+            return node && node.lastHint === hint;
+          });
+          if (hintMatches.length === 1) {
+            registerAlias(hintMatches[0], baseKey);
+            if (logger && typeof logger.debug === "function") {
+              logger.debug("[JYG] \u901A\u8FC7\u5730\u70B9\u63D0\u793A\u6821\u51C6\u4F4D\u7F6E", hintMatches[0], {
+                baseHash: hashKey(baseKey),
+                hint
+              });
+            }
+            return hintMatches[0];
+          }
+          if (hintMatches.length) {
+            candidates = hintMatches;
+          }
+        }
+        const resolved = pickByRecency(candidates);
+        if (resolved) {
+          registerAlias(resolved, baseKey);
+          if (logger && typeof logger.debug === "function") {
+            logger.debug("[JYG] \u901A\u8FC7\u6700\u8FD1\u8BBF\u95EE\u8BB0\u5F55\u63A8\u65AD\u4F4D\u7F6E", resolved, {
+              baseHash: hashKey(baseKey)
+            });
+          }
+          return resolved;
+        }
         if (logger && typeof logger.warn === "function") {
           logger.warn("[JYG] \u65E0\u6CD5\u6839\u636E\u90BB\u63A5\u5173\u7CFB\u89E3\u6790\u4F4D\u7F6E\uFF0C\u521B\u5EFA\u65B0\u522B\u540D", {
             baseHash: hashKey(baseKey),
             fromKey,
             direction,
-            aliasCount: aliasSet.size
+            aliasCount: aliasSet.size,
+            movementSignature,
+            hint
           });
         }
         return createAlias(baseKey, hint);
@@ -939,6 +1014,7 @@ tr:last-child td{border-bottom:none}
     const calibrateNeighbors = (node, movement) => {
       const timestamp = now();
       const seen = /* @__PURE__ */ new Set();
+      node.movementSignature = computeMovementSignature(movement);
       for (const link of movement) {
         seen.add(link.key);
         let meta = node.linkMeta.get(link.key);
@@ -982,7 +1058,14 @@ tr:last-child td{border-bottom:none}
       }
       const fromKey = pendingMove ? pendingMove.fromKey : null;
       const moveDirection = pendingMove ? pendingMove.direction : null;
-      const resolvedKey = resolveLocationAlias(baseLocationKey, hint, fromKey, moveDirection);
+      const normalizedMovement = canonicalizeMovement(movement);
+      const resolvedKey = resolveLocationAlias(
+        baseLocationKey,
+        hint,
+        fromKey,
+        moveDirection,
+        normalizedMovement
+      );
       if (!resolvedKey) {
         resetRuntime();
         return null;
@@ -1003,7 +1086,6 @@ tr:last-child td{border-bottom:none}
         node.visits += 1;
       }
       node.lastSeenAt = timestamp;
-      const normalizedMovement = canonicalizeMovement(movement);
       calibrateNeighbors(node, normalizedMovement);
       if (pendingMove && pendingMove.fromKey) {
         const prevNode = ensureNode(pendingMove.fromKey);
