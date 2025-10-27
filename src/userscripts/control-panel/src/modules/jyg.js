@@ -1,6 +1,11 @@
 import { $, $$, formatTime, now, safeText } from '../dom.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 import { emitModuleState } from '../events.js';
+import {
+  createNavigator,
+  computeLocationKey,
+  parseDirectionalLabel,
+} from './jyg/navigation.js';
 
 const SCAN_MS = 400;
 const CLICK_COOLDOWN_MS = 1000;
@@ -11,19 +16,8 @@ const LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
 const LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
 
 const MODULE_ID = 'jyg';
-const DIRECTION_OPPOSITES = {
-  左: '右',
-  右: '左',
-  上: '下',
-  下: '上',
-};
-const PREFERRED_DIRECTION_ORDER = ['右', '下', '左', '上'];
-const ARROW_DIRECTIONS = {
-  '←': '左',
-  '→': '右',
-  '↑': '上',
-  '↓': '下',
-};
+
+const navigator = createNavigator();
 
 let enabled = loadBoolean(LS_ENABLED);
 let scanCount = 0;
@@ -34,56 +28,6 @@ let targetBreakdown = {};
 let lootTotals = {};
 let seenLoot = new Set();
 let scanTimer = null;
-let currentLocationKey = null;
-let pendingMove = null;
-const locationGraph = new Map();
-let navigationStack = [];
-const locationMetadata = new Map();
-const baseKeyAliasMap = new Map();
-let nextLocationId = 1;
-let lastNavigationAction = null;
-
-function parseDirectionalLabel(text) {
-  const raw = text ? text.trim() : '';
-  if (!raw) {
-    return { direction: null, label: '' };
-  }
-
-  let direction = null;
-  let label = raw;
-
-  const prefixMatch = raw.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
-  if (prefixMatch) {
-    direction = prefixMatch[1];
-    label = prefixMatch[2] ? prefixMatch[2].trim() : label;
-  }
-
-  const arrowMatch = raw.match(/(.+?)([←→↑↓])\s*$/);
-  if (arrowMatch) {
-    label = arrowMatch[1] ? arrowMatch[1].trim() : label;
-    const arrow = arrowMatch[2];
-    if (arrow && ARROW_DIRECTIONS[arrow]) {
-      direction = direction || ARROW_DIRECTIONS[arrow];
-    }
-  }
-
-  if (!label) {
-    label = raw;
-  }
-
-  return { direction, label };
-}
-
-function clearNavigationState() {
-  currentLocationKey = null;
-  pendingMove = null;
-  navigationStack = [];
-  locationGraph.clear();
-  locationMetadata.clear();
-  baseKeyAliasMap.clear();
-  nextLocationId = 1;
-  lastNavigationAction = null;
-}
 
 function extractLocationHint() {
   const candidates = [
@@ -163,329 +107,17 @@ function buildNavigationContext(anchors) {
   };
 }
 
-function baseKeyIndex(baseKey) {
-  return baseKey || '__no_key__';
-}
-
-function registerAlias(alias, baseKey) {
-  if (!alias) return;
-  const key = baseKeyIndex(baseKey);
-  let set = baseKeyAliasMap.get(key);
-  if (!set) {
-    set = new Set();
-    baseKeyAliasMap.set(key, set);
-  }
-  set.add(alias);
-}
-
-function createAlias(baseKey) {
-  const alias = `loc#${nextLocationId++}`;
-  registerAlias(alias, baseKey);
-  return alias;
-}
-
-function hashKey(str) {
-  if (!str) return '';
-  let hash = 0;
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(16);
-}
-
-function recordLocationVisit(alias, baseKey, hint) {
-  if (!alias) return;
-  const timestamp = now();
-  let meta = locationMetadata.get(alias);
-  if (!meta) {
-    meta = {
-      baseKey: baseKey || null,
-      baseHash: baseKey ? hashKey(baseKey) : null,
-      lastHint: hint || null,
-      visits: 0,
-      firstSeenAt: timestamp,
-      lastSeenAt: timestamp,
-    };
-    locationMetadata.set(alias, meta);
-  }
-  if (baseKey) {
-    meta.baseKey = baseKey;
-    meta.baseHash = hashKey(baseKey);
-  }
-  if (hint) {
-    meta.lastHint = hint;
-  }
-  if (alias !== currentLocationKey) {
-    meta.visits += 1;
-  }
-  meta.lastSeenAt = timestamp;
-}
-
-function resolveLocationAlias(baseKey, hint, fromKey, direction) {
-  if (!baseKey) {
-    return null;
-  }
-  const indexKey = baseKeyIndex(baseKey);
-  const aliasSet = baseKeyAliasMap.get(indexKey);
-  if (fromKey && direction) {
-    const fromNode = locationGraph.get(fromKey);
-    if (fromNode) {
-      const knownNeighbor = fromNode.neighbors.get(direction);
-      if (knownNeighbor) {
-        registerAlias(knownNeighbor, baseKey);
-        return knownNeighbor;
-      }
-    }
-  }
-
-  if (aliasSet && aliasSet.size) {
-    if (fromKey && direction) {
-      const opposite = DIRECTION_OPPOSITES[direction] || null;
-      if (opposite) {
-        for (const alias of aliasSet.values()) {
-          const node = locationGraph.get(alias);
-          if (node && node.neighbors.get(opposite) === fromKey) {
-            registerAlias(alias, baseKey);
-            return alias;
-          }
-        }
-      }
-    } else {
-      const firstAlias = aliasSet.values().next().value;
-      if (firstAlias) {
-        registerAlias(firstAlias, baseKey);
-        return firstAlias;
-      }
-    }
-  }
-
-  const alias = createAlias(baseKey);
-  if (typeof console !== 'undefined' && console.debug) {
-    const preview = baseKey && baseKey.length > 120 ? `${baseKey.slice(0, 117)}…` : baseKey;
-    console.debug('[JYG] 创建新位置', alias, {
-      baseKey: preview,
-      fromKey,
-      direction,
-      hint,
-    });
-  }
-  return alias;
-}
-
-function getLocationMeta(key) {
-  return key ? locationMetadata.get(key) || null : null;
-}
-
-function computeLocationKey(movement, hint) {
-  const parts = movement
-    .map(({ key, href, label }) => `${key}|${href || ''}|${label}`)
-    .sort();
-  if (hint) {
-    parts.unshift(`hint:${hint}`);
-  }
-  if (!parts.length) {
-    return hint || null;
-  }
-  return parts.join('||');
-}
-
-function ensureGraphNode(key) {
-  if (!key) return null;
-  let node = locationGraph.get(key);
-  if (!node) {
-    node = {
-      tried: new Set(),
-      directionMeta: new Map(),
-      neighbors: new Map(),
-    };
-    locationGraph.set(key, node);
-  }
-  return node;
-}
-
-function registerNodeDirections(key, movement) {
-  const node = ensureGraphNode(key);
-  if (!node) return null;
-  node.directionMeta.clear();
-  for (const link of movement) {
-    node.directionMeta.set(link.key, {
-      direction: link.direction,
-      label: link.label,
-      href: link.href,
-    });
-  }
-  return node;
-}
-
-function hasUntriedDirections(key) {
-  const node = key ? locationGraph.get(key) : null;
-  if (!node) return false;
-  for (const linkKey of node.directionMeta.keys()) {
-    if (!node.tried.has(linkKey)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function alignNavigationStack(fromKey, toKey, viaDirection) {
-  if (!fromKey || !toKey) {
-    navigationStack = [
-      {
-        nodeKey: toKey,
-        parentKey: null,
-        viaDirection: null,
-        returnDirection: null,
-      },
-    ];
-    return;
-  }
-  const fromIndex = navigationStack.findIndex((entry) => entry.nodeKey === fromKey);
-  if (fromIndex === -1) {
-    navigationStack = [
-      {
-        nodeKey: toKey,
-        parentKey: null,
-        viaDirection: null,
-        returnDirection: null,
-      },
-    ];
-    return;
-  }
-  const fromEntry = navigationStack[fromIndex];
-  const parentEntry = fromIndex > 0 ? navigationStack[fromIndex - 1] : null;
-  const expectedBack = fromEntry ? fromEntry.returnDirection : null;
-  if (
-    parentEntry &&
-    parentEntry.nodeKey === toKey &&
-    expectedBack &&
-    viaDirection &&
-    expectedBack === viaDirection
-  ) {
-    navigationStack = navigationStack.slice(0, fromIndex);
-    return;
-  }
-  const returnDirection = viaDirection ? DIRECTION_OPPOSITES[viaDirection] || null : null;
-  navigationStack = navigationStack.slice(0, fromIndex + 1);
-  navigationStack.push({
-    nodeKey: toKey,
-    parentKey: fromKey,
-    viaDirection,
-    returnDirection,
-  });
-}
-
 function handleLocationContext(context) {
   const { baseLocationKey, movement, hint } = context;
-  if (!baseLocationKey) {
-    clearNavigationState();
-    context.locationKey = null;
-    return;
-  }
-
-  const fromKey = pendingMove ? pendingMove.fromKey : null;
-  const moveDirection = pendingMove ? pendingMove.direction : null;
-  const resolvedKey = resolveLocationAlias(baseLocationKey, hint, fromKey, moveDirection);
+  const resolvedKey = navigator.handleContext({ baseLocationKey, movement, hint });
   context.locationKey = resolvedKey;
-
-  if (!resolvedKey) {
-    clearNavigationState();
-    return;
-  }
-
-  recordLocationVisit(resolvedKey, baseLocationKey, hint);
-
-  if (resolvedKey !== currentLocationKey) {
-    const previousKey = currentLocationKey;
-    currentLocationKey = resolvedKey;
-    registerNodeDirections(resolvedKey, movement);
-    if (pendingMove && previousKey && pendingMove.fromKey === previousKey) {
-      const fromNode = locationGraph.get(previousKey);
-      if (fromNode && pendingMove.key) {
-        fromNode.tried.add(pendingMove.key);
-      }
-      if (fromNode && pendingMove.direction) {
-        fromNode.neighbors.set(pendingMove.direction, resolvedKey);
-      }
-    }
-    if (pendingMove && pendingMove.direction) {
-      const opposite = DIRECTION_OPPOSITES[pendingMove.direction];
-      if (opposite) {
-        const node = ensureGraphNode(resolvedKey);
-        if (node) {
-          node.neighbors.set(opposite, pendingMove.fromKey || null);
-        }
-      }
-    }
-    alignNavigationStack(pendingMove ? pendingMove.fromKey : null, resolvedKey, moveDirection);
-    pendingMove = null;
-  } else {
-    registerNodeDirections(resolvedKey, movement);
-  }
-}
-
-function directionPriority(direction) {
-  if (!direction) return PREFERRED_DIRECTION_ORDER.length + 1;
-  const idx = PREFERRED_DIRECTION_ORDER.indexOf(direction);
-  return idx === -1 ? PREFERRED_DIRECTION_ORDER.length : idx;
 }
 
 function selectNavigationMove(context) {
-  const { movement, locationKey } = context;
-  if (!movement.length || !locationKey) return null;
-
-  const node = registerNodeDirections(locationKey, movement) || ensureGraphNode(locationKey);
-  if (!node) return null;
-
-  const sorted = [...movement].sort((a, b) => directionPriority(a.direction) - directionPriority(b.direction));
-  const untried = sorted.filter((link) => !node.tried.has(link.key));
-  let chosen = untried.length ? untried[0] : null;
-
-  if (!chosen) {
-    const entryIndex = navigationStack.findIndex((entry) => entry.nodeKey === locationKey);
-    if (entryIndex !== -1) {
-      const entry = navigationStack[entryIndex];
-      if (entry && entry.returnDirection) {
-        chosen = sorted.find((link) => link.direction === entry.returnDirection) || null;
-      }
-    }
-  }
-
-  if (!chosen) {
-    for (const link of sorted) {
-      const neighborKey = link.direction ? node.neighbors.get(link.direction) : null;
-      if (neighborKey && hasUntriedDirections(neighborKey)) {
-        chosen = link;
-        break;
-      }
-    }
-  }
-
-  if (!chosen && sorted.length) {
-    chosen = sorted[0];
-  }
-
-  if (!chosen) return null;
-
-  const returnDirection = chosen.direction ? DIRECTION_OPPOSITES[chosen.direction] || null : null;
-  pendingMove = {
-    fromKey: locationKey,
-    direction: chosen.direction || null,
-    key: chosen.key,
-    label: chosen.label,
-    href: chosen.href || '',
-    returnDirection,
-  };
-
-  const moveLabel = chosen.direction
-    ? `${chosen.label}(${chosen.direction})`
-    : chosen.label;
-  lastNavigationAction = {
-    fromKey: locationKey,
-    direction: chosen.direction || null,
-    label: moveLabel,
-  };
-  return { el: chosen.el, label: moveLabel, direction: chosen.direction || null };
+  return navigator.selectNavigationMove({
+    movement: context.movement,
+    locationKey: context.locationKey,
+  });
 }
 
 function loadStats() {
@@ -556,7 +188,7 @@ function resetStats() {
   refreshSeenLootSnapshot();
   saveStats();
   updateUI();
-  clearNavigationState();
+  navigator.resetRuntime();
 }
 
 function recordScan() {
@@ -624,69 +256,6 @@ function formatLoot() {
     .join(' / ');
 }
 
-function shortenHint(hint) {
-  if (!hint) return '';
-  return hint.length > 20 ? `${hint.slice(0, 20)}…` : hint;
-}
-
-function formatLocationName(key, { includeHint = true } = {}) {
-  if (!key) return '-';
-  const meta = getLocationMeta(key);
-  if (!meta) return key;
-  const visitSuffix = meta.visits ? `×${meta.visits}` : '';
-  const hashPart = meta.baseHash ? ` [${meta.baseHash}]` : '';
-  if (!includeHint) {
-    return `${key}${visitSuffix}${hashPart}`;
-  }
-  const hint = shortenHint(meta.lastHint);
-  return hint
-    ? `${key}${visitSuffix}${hashPart} (${hint})`
-    : `${key}${visitSuffix}${hashPart}`;
-}
-
-function formatDirectionSummary(key) {
-  if (!key) return '-';
-  const node = locationGraph.get(key);
-  if (!node) return '-';
-  const entries = [...node.directionMeta.entries()].sort(
-    (a, b) => directionPriority(a[1].direction) - directionPriority(b[1].direction)
-  );
-  if (!entries.length) return '-';
-  const parts = [];
-  for (const [linkKey, meta] of entries) {
-    const dir = meta.direction || '';
-    const label = dir || meta.label || linkKey;
-    const tried = node.tried.has(linkKey);
-    const neighborKey = dir ? node.neighbors.get(dir) : null;
-    const neighborLabel = neighborKey
-      ? formatLocationName(neighborKey, { includeHint: false })
-      : '';
-    const suffix = neighborLabel ? `→${neighborLabel}` : '';
-    parts.push(`${label}${dir ? '' : '(?)'}:${tried ? '✓' : '·'}${suffix}`);
-  }
-  return parts.join(' / ');
-}
-
-function formatNavigationStackSummary() {
-  if (!navigationStack.length) return '-';
-  return navigationStack.map((entry) => formatLocationName(entry.nodeKey)).join(' → ');
-}
-
-function formatPendingAction() {
-  if (pendingMove) {
-    const origin = formatLocationName(pendingMove.fromKey, { includeHint: false });
-    const dir = pendingMove.direction ? `(${pendingMove.direction})` : '';
-    const label = pendingMove.label || pendingMove.key || '-';
-    return `${origin || '-'}→${label}${dir}`;
-  }
-  if (lastNavigationAction) {
-    const origin = formatLocationName(lastNavigationAction.fromKey, { includeHint: false });
-    const dir = lastNavigationAction.direction ? `(${lastNavigationAction.direction})` : '';
-    return `${origin || '-'}→${lastNavigationAction.label}${dir}`;
-  }
-  return '-';
-}
-
 function mountUI() {
   const body = $('#jyg-body');
   if (!body) return;
@@ -751,6 +320,11 @@ function mountUI() {
         class="value"
         data-value="0"
       ></span></div>
+    <div class="kv"><span class="label" data-label="规划路径"></span><span
+        id="jyg-route"
+        class="value"
+        data-value="-"
+      ></span></div>
   `;
   const toggle = $('#jyg-toggle');
   if (toggle) {
@@ -779,11 +353,13 @@ function updateUI() {
   safeText($('#jyg-scans'), scanCount);
   safeText($('#jyg-targets'), formatBreakdown());
   safeText($('#jyg-loot'), formatLoot());
-  safeText($('#jyg-location'), formatLocationName(currentLocationKey));
-  safeText($('#jyg-directions'), formatDirectionSummary(currentLocationKey));
-  safeText($('#jyg-stack'), formatNavigationStackSummary());
-  safeText($('#jyg-pending'), formatPendingAction());
-  safeText($('#jyg-locations'), locationGraph.size);
+  const telemetry = navigator.getTelemetry();
+  safeText($('#jyg-location'), telemetry.locationLabel || '-');
+  safeText($('#jyg-directions'), telemetry.directionSummary || '-');
+  safeText($('#jyg-stack'), telemetry.stackSummary || '-');
+  safeText($('#jyg-pending'), telemetry.pendingAction || '-');
+  safeText($('#jyg-locations'), telemetry.locationCount || 0);
+  safeText($('#jyg-route'), telemetry.plannedRoute || '-');
 }
 
 function pickTarget(context) {
@@ -797,7 +373,7 @@ function pickTarget(context) {
     () => {
       const el = byExact('攻击景阳岗小大虫');
       if (el) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el, label: '攻击景阳岗小大虫' };
       }
       return null;
@@ -805,7 +381,7 @@ function pickTarget(context) {
     () => {
       const el = byExact('攻击景阳岗大虫');
       if (el) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el, label: '攻击景阳岗大虫' };
       }
       return null;
@@ -813,7 +389,7 @@ function pickTarget(context) {
     () => {
       const el = byExact('景阳岗大虫');
       if (el) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el, label: '景阳岗大虫' };
       }
       return null;
@@ -821,7 +397,7 @@ function pickTarget(context) {
     () => {
       const el = byExact('景阳岗小大虫');
       if (el) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el, label: '景阳岗小大虫' };
       }
       return null;
@@ -829,12 +405,12 @@ function pickTarget(context) {
     () => {
       if (context.gather.length) {
         const pick = context.gather[0];
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el: pick.el, label: pick.label };
       }
       const arr = byIncludes('灵芝');
       if (arr && arr.length) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el: arr[0], label: '灵芝' };
       }
       return null;
@@ -843,13 +419,13 @@ function pickTarget(context) {
       if (context.misc.length) {
         const ret = context.misc.find((item) => item.label.includes('返回'));
         if (ret) {
-          pendingMove = null;
+          navigator.markMoveFailure();
           return { el: ret.el, label: ret.label };
         }
       }
       const el = byExact('返回游戏');
       if (el) {
-        pendingMove = null;
+        navigator.markMoveFailure();
         return { el, label: '返回游戏' };
       }
       return null;
@@ -907,7 +483,7 @@ function disable() {
   saveStats();
   updateUI();
   announceState();
-  clearNavigationState();
+  navigator.resetRuntime();
 }
 
 function toggleEnabled() {
