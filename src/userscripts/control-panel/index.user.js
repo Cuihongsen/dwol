@@ -521,6 +521,7 @@ tr:last-child td{border-bottom:none}
 
   // src/userscripts/control-panel/src/modules/jyg/navigation.js
   var STORAGE_KEY = "jyg_nav_state_v1";
+  var PENDING_MOVE_TTL_MS = 2 * 60 * 1e3;
   var VOLATILE_QUERY_PARAMS = /* @__PURE__ */ new Set(["sid"]);
   var DIRECTION_OPPOSITES = {
     \u5DE6: "\u53F3",
@@ -538,7 +539,8 @@ tr:last-child td{border-bottom:none}
   var EMPTY_NAV_STATE = () => ({
     nextLocationId: 1,
     aliasIndex: /* @__PURE__ */ new Map(),
-    nodes: /* @__PURE__ */ new Map()
+    nodes: /* @__PURE__ */ new Map(),
+    pendingMove: null
   });
   function canonicalizeHref(href) {
     if (!href) return "";
@@ -621,6 +623,40 @@ tr:last-child td{border-bottom:none}
       obj[key] = transform(value, key);
     }
     return obj;
+  }
+  function sanitizePendingMove(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const fromKey = typeof raw.fromKey === "string" && raw.fromKey ? raw.fromKey : null;
+    const key = typeof raw.key === "string" && raw.key ? raw.key : null;
+    if (!fromKey || !key) {
+      return null;
+    }
+    const direction = typeof raw.direction === "string" && raw.direction ? raw.direction : null;
+    const returnDirection = typeof raw.returnDirection === "string" && raw.returnDirection ? raw.returnDirection : null;
+    const label = typeof raw.label === "string" && raw.label ? raw.label : "";
+    const href = typeof raw.href === "string" && raw.href ? canonicalizeHref(raw.href) : "";
+    const createdAt = typeof raw.createdAt === "number" ? raw.createdAt : 0;
+    return {
+      fromKey,
+      direction,
+      key,
+      label,
+      href,
+      returnDirection,
+      createdAt
+    };
+  }
+  function serializePendingMove(pending) {
+    if (!pending) return null;
+    return {
+      fromKey: pending.fromKey || null,
+      direction: pending.direction || null,
+      key: pending.key || null,
+      label: pending.label || null,
+      href: pending.href || "",
+      returnDirection: pending.returnDirection || null,
+      createdAt: pending.createdAt || 0
+    };
   }
   function hashKey(str) {
     if (!str) return "";
@@ -722,6 +758,11 @@ tr:last-child td{border-bottom:none}
         });
       }
     }
+    let pendingMove = sanitizePendingMove(raw.pendingMove);
+    if (pendingMove && pendingMove.createdAt && now() - pendingMove.createdAt > PENDING_MOVE_TTL_MS) {
+      pendingMove = null;
+    }
+    state.pendingMove = pendingMove;
     return state;
   }
   function saveState(storageKey, state) {
@@ -739,7 +780,8 @@ tr:last-child td{border-bottom:none}
         visits: node.visits,
         firstSeenAt: node.firstSeenAt,
         lastSeenAt: node.lastSeenAt
-      }))
+      })),
+      pendingMove: serializePendingMove(state.pendingMove)
     };
     saveJSON(storageKey, data);
   }
@@ -814,11 +856,12 @@ tr:last-child td{border-bottom:none}
   function createNavigator({ storageKey = STORAGE_KEY, logger = console } = {}) {
     let state = loadState(storageKey);
     let currentLocationKey = null;
-    let pendingMove = null;
+    let pendingMove = state.pendingMove ? __spreadValues({}, state.pendingMove) : null;
     let lastNavigationAction = null;
     let navigationStack = [];
     let plannedRoute = [];
     const persist = () => {
+      state.pendingMove = pendingMove ? serializePendingMove(pendingMove) : null;
       saveState(storageKey, state);
     };
     const ensureNode = (alias) => {
@@ -1045,6 +1088,7 @@ tr:last-child td{border-bottom:none}
       lastNavigationAction = null;
       navigationStack = [];
       plannedRoute = [];
+      persist();
     };
     const resetAll = () => {
       state = EMPTY_NAV_STATE();
@@ -1171,7 +1215,8 @@ tr:last-child td{border-bottom:none}
             key: link.key,
             label: link.label,
             href: link.href || "",
-            returnDirection: returnDirection2
+            returnDirection: returnDirection2,
+            createdAt: now()
           };
           lastNavigationAction = {
             fromKey: locationKey,
@@ -1179,6 +1224,7 @@ tr:last-child td{border-bottom:none}
             label: link.direction ? `${link.label}(${link.direction})` : link.label
           };
           const moveLabel2 = link.direction ? `${link.label}(${link.direction})` : link.label;
+          persist();
           return { el: link.el, label: moveLabel2, direction: link.direction || null };
         }
         plannedRoute = [];
@@ -1212,7 +1258,8 @@ tr:last-child td{border-bottom:none}
         key: chosen.key,
         label: chosen.label,
         href: chosen.href || "",
-        returnDirection
+        returnDirection,
+        createdAt: now()
       };
       lastNavigationAction = {
         fromKey: locationKey,
@@ -1220,6 +1267,7 @@ tr:last-child td{border-bottom:none}
         label: chosen.direction ? `${chosen.label}(${chosen.direction})` : chosen.label
       };
       const moveLabel = chosen.direction ? `${chosen.label}(${chosen.direction})` : chosen.label;
+      persist();
       return {
         el: chosen.el,
         label: moveLabel,
@@ -1241,6 +1289,7 @@ tr:last-child td{border-bottom:none}
     const markMoveFailure = () => {
       pendingMove = null;
       plannedRoute = [];
+      persist();
     };
     return {
       resetRuntime,

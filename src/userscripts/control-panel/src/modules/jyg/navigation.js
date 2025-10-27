@@ -2,6 +2,7 @@ import { now } from '../../dom.js';
 import { loadJSON, saveJSON } from '../../storage.js';
 
 const STORAGE_KEY = 'jyg_nav_state_v1';
+const PENDING_MOVE_TTL_MS = 2 * 60 * 1000;
 const VOLATILE_QUERY_PARAMS = new Set(['sid']);
 
 const DIRECTION_OPPOSITES = {
@@ -24,6 +25,7 @@ const EMPTY_NAV_STATE = () => ({
   nextLocationId: 1,
   aliasIndex: new Map(),
   nodes: new Map(),
+  pendingMove: null,
 });
 
 function canonicalizeHref(href) {
@@ -116,6 +118,43 @@ function serializeMap(map, transform = (value) => value) {
     obj[key] = transform(value, key);
   }
   return obj;
+}
+
+function sanitizePendingMove(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const fromKey = typeof raw.fromKey === 'string' && raw.fromKey ? raw.fromKey : null;
+  const key = typeof raw.key === 'string' && raw.key ? raw.key : null;
+  if (!fromKey || !key) {
+    return null;
+  }
+  const direction = typeof raw.direction === 'string' && raw.direction ? raw.direction : null;
+  const returnDirection =
+    typeof raw.returnDirection === 'string' && raw.returnDirection ? raw.returnDirection : null;
+  const label = typeof raw.label === 'string' && raw.label ? raw.label : '';
+  const href = typeof raw.href === 'string' && raw.href ? canonicalizeHref(raw.href) : '';
+  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : 0;
+  return {
+    fromKey,
+    direction,
+    key,
+    label,
+    href,
+    returnDirection,
+    createdAt,
+  };
+}
+
+function serializePendingMove(pending) {
+  if (!pending) return null;
+  return {
+    fromKey: pending.fromKey || null,
+    direction: pending.direction || null,
+    key: pending.key || null,
+    label: pending.label || null,
+    href: pending.href || '',
+    returnDirection: pending.returnDirection || null,
+    createdAt: pending.createdAt || 0,
+  };
 }
 
 function hashKey(str) {
@@ -231,6 +270,11 @@ function loadState(storageKey) {
       });
     }
   }
+  let pendingMove = sanitizePendingMove(raw.pendingMove);
+  if (pendingMove && pendingMove.createdAt && now() - pendingMove.createdAt > PENDING_MOVE_TTL_MS) {
+    pendingMove = null;
+  }
+  state.pendingMove = pendingMove;
   return state;
 }
 
@@ -250,6 +294,7 @@ function saveState(storageKey, state) {
       firstSeenAt: node.firstSeenAt,
       lastSeenAt: node.lastSeenAt,
     })),
+    pendingMove: serializePendingMove(state.pendingMove),
   };
   saveJSON(storageKey, data);
 }
@@ -342,12 +387,13 @@ function formatPlannedRoute(route, state) {
 export function createNavigator({ storageKey = STORAGE_KEY, logger = console } = {}) {
   let state = loadState(storageKey);
   let currentLocationKey = null;
-  let pendingMove = null;
+  let pendingMove = state.pendingMove ? { ...state.pendingMove } : null;
   let lastNavigationAction = null;
   let navigationStack = [];
   let plannedRoute = [];
 
   const persist = () => {
+    state.pendingMove = pendingMove ? serializePendingMove(pendingMove) : null;
     saveState(storageKey, state);
   };
 
@@ -595,6 +641,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     lastNavigationAction = null;
     navigationStack = [];
     plannedRoute = [];
+    persist();
   };
 
   const resetAll = () => {
@@ -726,6 +773,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
           label: link.label,
           href: link.href || '',
           returnDirection,
+          createdAt: now(),
         };
         lastNavigationAction = {
           fromKey: locationKey,
@@ -733,6 +781,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
           label: link.direction ? `${link.label}(${link.direction})` : link.label,
         };
         const moveLabel = link.direction ? `${link.label}(${link.direction})` : link.label;
+        persist();
         return { el: link.el, label: moveLabel, direction: link.direction || null };
       }
       plannedRoute = [];
@@ -767,6 +816,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       label: chosen.label,
       href: chosen.href || '',
       returnDirection,
+      createdAt: now(),
     };
     lastNavigationAction = {
       fromKey: locationKey,
@@ -774,6 +824,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       label: chosen.direction ? `${chosen.label}(${chosen.direction})` : chosen.label,
     };
     const moveLabel = chosen.direction ? `${chosen.label}(${chosen.direction})` : chosen.label;
+    persist();
     return {
       el: chosen.el,
       label: moveLabel,
@@ -797,6 +848,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
   const markMoveFailure = () => {
     pendingMove = null;
     plannedRoute = [];
+    persist();
   };
 
   return {
