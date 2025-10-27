@@ -651,13 +651,30 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
   };
 
   const handleContext = ({ baseLocationKey, movement, hint }) => {
+    const normalizedMovement = canonicalizeMovement(movement);
+    if (!normalizedMovement.length) {
+      if (logger && typeof logger.debug === 'function') {
+        logger.debug('[JYG] 跳过无出入口的页面', {
+          hint: shortenHint(hint),
+          pendingMove: pendingMove ? pendingMove.direction || pendingMove.key : null,
+        });
+      }
+      if (currentLocationKey) {
+        const node = ensureNode(currentLocationKey);
+        if (hint) {
+          node.lastHint = hint;
+        }
+        node.lastSeenAt = now();
+        persist();
+      }
+      return currentLocationKey;
+    }
     if (!baseLocationKey) {
       resetRuntime();
       return null;
     }
     const fromKey = pendingMove ? pendingMove.fromKey : null;
     const moveDirection = pendingMove ? pendingMove.direction : null;
-    const normalizedMovement = canonicalizeMovement(movement);
     const resolvedKey = resolveLocationAlias(
       baseLocationKey,
       hint,

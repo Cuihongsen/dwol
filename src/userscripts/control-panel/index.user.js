@@ -1096,13 +1096,30 @@ tr:last-child td{border-bottom:none}
       persist();
     };
     const handleContext = ({ baseLocationKey, movement, hint }) => {
+      const normalizedMovement = canonicalizeMovement(movement);
+      if (!normalizedMovement.length) {
+        if (logger && typeof logger.debug === "function") {
+          logger.debug("[JYG] \u8DF3\u8FC7\u65E0\u51FA\u5165\u53E3\u7684\u9875\u9762", {
+            hint: shortenHint(hint),
+            pendingMove: pendingMove ? pendingMove.direction || pendingMove.key : null
+          });
+        }
+        if (currentLocationKey) {
+          const node2 = ensureNode(currentLocationKey);
+          if (hint) {
+            node2.lastHint = hint;
+          }
+          node2.lastSeenAt = now();
+          persist();
+        }
+        return currentLocationKey;
+      }
       if (!baseLocationKey) {
         resetRuntime();
         return null;
       }
       const fromKey = pendingMove ? pendingMove.fromKey : null;
       const moveDirection = pendingMove ? pendingMove.direction : null;
-      const normalizedMovement = canonicalizeMovement(movement);
       const resolvedKey = resolveLocationAlias(
         baseLocationKey,
         hint,
