@@ -879,11 +879,20 @@ tr:last-child td{border-bottom:none}
             }
           }
         }
-        const firstAlias = aliasSet.values().next().value;
-        if (firstAlias) {
-          registerAlias(firstAlias, baseKey);
-          return firstAlias;
+        if (logger && typeof logger.warn === "function") {
+          logger.warn("[JYG] \u65E0\u6CD5\u6839\u636E\u90BB\u63A5\u5173\u7CFB\u89E3\u6790\u4F4D\u7F6E\uFF0C\u521B\u5EFA\u65B0\u522B\u540D", {
+            baseHash: hashKey(baseKey),
+            fromKey,
+            direction,
+            aliasCount: aliasSet.size
+          });
         }
+        return createAlias(baseKey, hint);
+      }
+      const firstAlias = aliasSet && aliasSet.size ? aliasSet.values().next().value : null;
+      if (firstAlias) {
+        registerAlias(firstAlias, baseKey);
+        return firstAlias;
       }
       return createAlias(baseKey, hint);
     };

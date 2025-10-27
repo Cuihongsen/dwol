@@ -409,11 +409,20 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
           }
         }
       }
-      const firstAlias = aliasSet.values().next().value;
-      if (firstAlias) {
-        registerAlias(firstAlias, baseKey);
-        return firstAlias;
+      if (logger && typeof logger.warn === 'function') {
+        logger.warn('[JYG] 无法根据邻接关系解析位置，创建新别名', {
+          baseHash: hashKey(baseKey),
+          fromKey,
+          direction,
+          aliasCount: aliasSet.size,
+        });
       }
+      return createAlias(baseKey, hint);
+    }
+    const firstAlias = aliasSet && aliasSet.size ? aliasSet.values().next().value : null;
+    if (firstAlias) {
+      registerAlias(firstAlias, baseKey);
+      return firstAlias;
     }
     return createAlias(baseKey, hint);
   };
