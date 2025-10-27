@@ -4,6 +4,7 @@ import { emitModuleState } from '../events.js';
 import {
   createNavigator,
   computeLocationKey,
+  canonicalizeHref,
   parseDirectionalLabel,
 } from './jyg/navigation.js';
 
@@ -28,6 +29,7 @@ let targetBreakdown = {};
 let lootTotals = {};
 let seenLoot = new Set();
 let scanTimer = null;
+let lastTelemetryDigest = null;
 
 function extractLocationHint() {
   const candidates = [
@@ -64,7 +66,8 @@ function buildNavigationContext(anchors) {
   for (const el of anchors) {
     const text = el.textContent ? el.textContent.trim() : '';
     if (!text) continue;
-    const href = el.getAttribute('href') || '';
+    const rawHref = el.getAttribute('href') || '';
+    const href = canonicalizeHref(rawHref);
     const { direction, label } = parseDirectionalLabel(text);
     const normalizedLabel = label || text;
     const base = { el, text, direction, label: normalizedLabel, href };
@@ -189,6 +192,7 @@ function resetStats() {
   saveStats();
   updateUI();
   navigator.resetRuntime();
+  lastTelemetryDigest = null;
 }
 
 function recordScan() {
@@ -295,36 +299,6 @@ function mountUI() {
         class="value"
         data-value="-"
       ></span></div>
-    <div class="kv"><span class="label" data-label="当前位置"></span><span
-        id="jyg-location"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="方向状态"></span><span
-        id="jyg-directions"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="导航栈"></span><span
-        id="jyg-stack"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="导航动作"></span><span
-        id="jyg-pending"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="节点数量"></span><span
-        id="jyg-locations"
-        class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="规划路径"></span><span
-        id="jyg-route"
-        class="value"
-        data-value="-"
-      ></span></div>
   `;
   const toggle = $('#jyg-toggle');
   if (toggle) {
@@ -335,6 +309,32 @@ function mountUI() {
     reset.onclick = () => resetStats();
   }
   updateUI();
+}
+
+function logTelemetry(telemetry) {
+  if (!telemetry) return;
+  const snapshot = JSON.stringify({
+    key: telemetry.currentLocationKey || null,
+    location: telemetry.locationLabel || '-',
+    directions: telemetry.directionSummary || '-',
+    stack: telemetry.stackSummary || '-',
+    pending: telemetry.pendingAction || '-',
+    route: telemetry.plannedRoute || '-',
+    nodes: telemetry.locationCount || 0,
+  });
+  if (snapshot === lastTelemetryDigest) {
+    return;
+  }
+  lastTelemetryDigest = snapshot;
+  console.info('[JYG] 导航遥测', {
+    key: telemetry.currentLocationKey || null,
+    location: telemetry.locationLabel || '-',
+    directions: telemetry.directionSummary || '-',
+    stack: telemetry.stackSummary || '-',
+    pending: telemetry.pendingAction || '-',
+    route: telemetry.plannedRoute || '-',
+    nodes: telemetry.locationCount || 0,
+  });
 }
 
 function updateUI() {
@@ -354,12 +354,7 @@ function updateUI() {
   safeText($('#jyg-targets'), formatBreakdown());
   safeText($('#jyg-loot'), formatLoot());
   const telemetry = navigator.getTelemetry();
-  safeText($('#jyg-location'), telemetry.locationLabel || '-');
-  safeText($('#jyg-directions'), telemetry.directionSummary || '-');
-  safeText($('#jyg-stack'), telemetry.stackSummary || '-');
-  safeText($('#jyg-pending'), telemetry.pendingAction || '-');
-  safeText($('#jyg-locations'), telemetry.locationCount || 0);
-  safeText($('#jyg-route'), telemetry.plannedRoute || '-');
+  logTelemetry(telemetry);
 }
 
 function pickTarget(context) {
@@ -484,6 +479,7 @@ function disable() {
   updateUI();
   announceState();
   navigator.resetRuntime();
+  lastTelemetryDigest = null;
 }
 
 function toggleEnabled() {

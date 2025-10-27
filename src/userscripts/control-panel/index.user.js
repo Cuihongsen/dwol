@@ -521,6 +521,7 @@ tr:last-child td{border-bottom:none}
 
   // src/userscripts/control-panel/src/modules/jyg/navigation.js
   var STORAGE_KEY = "jyg_nav_state_v1";
+  var VOLATILE_QUERY_PARAMS = /* @__PURE__ */ new Set(["sid"]);
   var DIRECTION_OPPOSITES = {
     \u5DE6: "\u53F3",
     \u53F3: "\u5DE6",
@@ -539,6 +540,50 @@ tr:last-child td{border-bottom:none}
     aliasIndex: /* @__PURE__ */ new Map(),
     nodes: /* @__PURE__ */ new Map()
   });
+  function canonicalizeHref(href) {
+    if (!href) return "";
+    try {
+      const url = new URL(href, "https://invalid.example/");
+      const params = new URLSearchParams(url.search);
+      for (const key of Array.from(params.keys())) {
+        if (VOLATILE_QUERY_PARAMS.has(key)) {
+          params.delete(key);
+        }
+      }
+      const ordered = Array.from(params.entries()).sort((a, b) => {
+        if (a[0] === b[0]) {
+          return a[1].localeCompare(b[1]);
+        }
+        return a[0].localeCompare(b[0]);
+      });
+      const normalizedParams = new URLSearchParams();
+      for (const [key, value] of ordered) {
+        normalizedParams.append(key, value);
+      }
+      const pathname = url.pathname.replace(/^\//, "");
+      const query = normalizedParams.toString();
+      const hash = url.hash || "";
+      if (!pathname && !query && !hash) {
+        return "";
+      }
+      return `${pathname}${query ? `?${query}` : ""}${hash}`;
+    } catch (err) {
+      return href;
+    }
+  }
+  function canonicalizeMovement(movement = []) {
+    return movement.map((link) => {
+      const normalizedHref = canonicalizeHref(link && link.href);
+      let key = link ? link.key : "";
+      if (key && key.startsWith("move:") && normalizedHref) {
+        key = `move:${normalizedHref}`;
+      }
+      return __spreadProps(__spreadValues({}, link), {
+        href: normalizedHref,
+        key
+      });
+    });
+  }
   function baseKeyIndex(baseKey) {
     return baseKey || "__no_key__";
   }
@@ -600,7 +645,8 @@ tr:last-child td{border-bottom:none}
     return { direction, label };
   }
   function computeLocationKey(movement, hint) {
-    const parts = movement.map(({ key, href, label }) => `${key}|${href || ""}|${label}`).sort();
+    const normalized = canonicalizeMovement(movement);
+    const parts = normalized.map(({ key, href, label }) => `${key}|${href || ""}|${label}`).sort();
     if (hint) {
       parts.unshift(`hint:${hint}`);
     }
@@ -644,13 +690,19 @@ tr:last-child td{border-bottom:none}
     }
     if (raw.nodes && typeof raw.nodes === "object") {
       for (const [alias, node] of Object.entries(raw.nodes)) {
+        const linkMeta = toMap(node.linkMeta);
+        for (const meta of linkMeta.values()) {
+          if (meta && meta.href) {
+            meta.href = canonicalizeHref(meta.href);
+          }
+        }
         state.nodes.set(alias, {
           alias,
           baseKey: node.baseKey || null,
           baseHash: node.baseHash || null,
           lastHint: node.lastHint || null,
           neighbors: toMap(node.neighbors),
-          linkMeta: toMap(node.linkMeta),
+          linkMeta,
           tried: toSet(node.tried),
           visits: Number(node.visits) || 0,
           firstSeenAt: Number(node.firstSeenAt) || 0,
@@ -887,7 +939,7 @@ tr:last-child td{border-bottom:none}
         }
         meta.direction = link.direction || meta.direction || null;
         meta.label = link.label || meta.label || link.key;
-        meta.href = link.href || meta.href || "";
+        meta.href = canonicalizeHref(link.href) || meta.href || "";
         meta.lastSeenAt = timestamp;
       }
       for (const key of Array.from(node.linkMeta.keys())) {
@@ -942,7 +994,8 @@ tr:last-child td{border-bottom:none}
         node.visits += 1;
       }
       node.lastSeenAt = timestamp;
-      calibrateNeighbors(node, movement);
+      const normalizedMovement = canonicalizeMovement(movement);
+      calibrateNeighbors(node, normalizedMovement);
       if (pendingMove && pendingMove.fromKey) {
         const prevNode = ensureNode(pendingMove.fromKey);
         if (pendingMove.key) {
@@ -1007,6 +1060,7 @@ tr:last-child td{border-bottom:none}
     };
     const selectNavigationMove2 = ({ movement, locationKey }) => {
       if (!movement.length || !locationKey) return null;
+      const normalizedMovement = canonicalizeMovement(movement);
       const node = state.nodes.get(locationKey);
       if (!node) return null;
       plannedRoute = plannedRoute.filter((step) => state.nodes.has(step.from) && state.nodes.has(step.to));
@@ -1015,7 +1069,7 @@ tr:last-child td{border-bottom:none}
       }
       if (plannedRoute.length) {
         const step = plannedRoute.shift();
-        const link = movement.find(
+        const link = normalizedMovement.find(
           (item) => item.direction === step.direction && node.neighbors.get(step.direction) === step.to
         );
         if (link) {
@@ -1038,7 +1092,7 @@ tr:last-child td{border-bottom:none}
         }
         plannedRoute = [];
       }
-      const sorted = [...movement].sort(
+      const sorted = [...normalizedMovement].sort(
         (a, b) => directionPriority(a.direction) - directionPriority(b.direction)
       );
       const untried = sorted.filter((link) => !node.tried.has(link.key));
@@ -1131,6 +1185,7 @@ tr:last-child td{border-bottom:none}
   var lootTotals = {};
   var seenLoot = /* @__PURE__ */ new Set();
   var scanTimer = null;
+  var lastTelemetryDigest = null;
   function extractLocationHint() {
     const candidates = [
       document.querySelector("#ly_map strong"),
@@ -1161,7 +1216,8 @@ tr:last-child td{border-bottom:none}
     for (const el of anchors) {
       const text = el.textContent ? el.textContent.trim() : "";
       if (!text) continue;
-      const href = el.getAttribute("href") || "";
+      const rawHref = el.getAttribute("href") || "";
+      const href = canonicalizeHref(rawHref);
       const { direction, label } = parseDirectionalLabel(text);
       const normalizedLabel = label || text;
       const base = { el, text, direction, label: normalizedLabel, href };
@@ -1266,6 +1322,7 @@ tr:last-child td{border-bottom:none}
     saveStats2();
     updateUI2();
     navigator.resetRuntime();
+    lastTelemetryDigest = null;
   }
   function recordScan() {
     scanCount += 1;
@@ -1356,36 +1413,6 @@ tr:last-child td{border-bottom:none}
         class="value"
         data-value="-"
       ></span></div>
-    <div class="kv"><span class="label" data-label="\u5F53\u524D\u4F4D\u7F6E"></span><span
-        id="jyg-location"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u65B9\u5411\u72B6\u6001"></span><span
-        id="jyg-directions"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u5BFC\u822A\u6808"></span><span
-        id="jyg-stack"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u5BFC\u822A\u52A8\u4F5C"></span><span
-        id="jyg-pending"
-        class="value"
-        data-value="-"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u8282\u70B9\u6570\u91CF"></span><span
-        id="jyg-locations"
-        class="value"
-        data-value="0"
-      ></span></div>
-    <div class="kv"><span class="label" data-label="\u89C4\u5212\u8DEF\u5F84"></span><span
-        id="jyg-route"
-        class="value"
-        data-value="-"
-      ></span></div>
   `;
     const toggle = $("#jyg-toggle");
     if (toggle) {
@@ -1396,6 +1423,31 @@ tr:last-child td{border-bottom:none}
       reset.onclick = () => resetStats2();
     }
     updateUI2();
+  }
+  function logTelemetry(telemetry) {
+    if (!telemetry) return;
+    const snapshot = JSON.stringify({
+      key: telemetry.currentLocationKey || null,
+      location: telemetry.locationLabel || "-",
+      directions: telemetry.directionSummary || "-",
+      stack: telemetry.stackSummary || "-",
+      pending: telemetry.pendingAction || "-",
+      route: telemetry.plannedRoute || "-",
+      nodes: telemetry.locationCount || 0
+    });
+    if (snapshot === lastTelemetryDigest) {
+      return;
+    }
+    lastTelemetryDigest = snapshot;
+    console.info("[JYG] \u5BFC\u822A\u9065\u6D4B", {
+      key: telemetry.currentLocationKey || null,
+      location: telemetry.locationLabel || "-",
+      directions: telemetry.directionSummary || "-",
+      stack: telemetry.stackSummary || "-",
+      pending: telemetry.pendingAction || "-",
+      route: telemetry.plannedRoute || "-",
+      nodes: telemetry.locationCount || 0
+    });
   }
   function updateUI2() {
     const status = $("#jyg-status");
@@ -1414,12 +1466,7 @@ tr:last-child td{border-bottom:none}
     safeText($("#jyg-targets"), formatBreakdown());
     safeText($("#jyg-loot"), formatLoot());
     const telemetry = navigator.getTelemetry();
-    safeText($("#jyg-location"), telemetry.locationLabel || "-");
-    safeText($("#jyg-directions"), telemetry.directionSummary || "-");
-    safeText($("#jyg-stack"), telemetry.stackSummary || "-");
-    safeText($("#jyg-pending"), telemetry.pendingAction || "-");
-    safeText($("#jyg-locations"), telemetry.locationCount || 0);
-    safeText($("#jyg-route"), telemetry.plannedRoute || "-");
+    logTelemetry(telemetry);
   }
   function pickTarget(context) {
     const anchors = context.allAnchors;
@@ -1535,6 +1582,7 @@ tr:last-child td{border-bottom:none}
     updateUI2();
     announceState2();
     navigator.resetRuntime();
+    lastTelemetryDigest = null;
   }
   function toggleEnabled2() {
     if (enabled2) {

@@ -2,6 +2,7 @@ import { now } from '../../dom.js';
 import { loadJSON, saveJSON } from '../../storage.js';
 
 const STORAGE_KEY = 'jyg_nav_state_v1';
+const VOLATILE_QUERY_PARAMS = new Set(['sid']);
 
 const DIRECTION_OPPOSITES = {
   左: '右',
@@ -24,6 +25,53 @@ const EMPTY_NAV_STATE = () => ({
   aliasIndex: new Map(),
   nodes: new Map(),
 });
+
+function canonicalizeHref(href) {
+  if (!href) return '';
+  try {
+    const url = new URL(href, 'https://invalid.example/');
+    const params = new URLSearchParams(url.search);
+    for (const key of Array.from(params.keys())) {
+      if (VOLATILE_QUERY_PARAMS.has(key)) {
+        params.delete(key);
+      }
+    }
+    const ordered = Array.from(params.entries()).sort((a, b) => {
+      if (a[0] === b[0]) {
+        return a[1].localeCompare(b[1]);
+      }
+      return a[0].localeCompare(b[0]);
+    });
+    const normalizedParams = new URLSearchParams();
+    for (const [key, value] of ordered) {
+      normalizedParams.append(key, value);
+    }
+    const pathname = url.pathname.replace(/^\//, '');
+    const query = normalizedParams.toString();
+    const hash = url.hash || '';
+    if (!pathname && !query && !hash) {
+      return '';
+    }
+    return `${pathname}${query ? `?${query}` : ''}${hash}`;
+  } catch (err) {
+    return href;
+  }
+}
+
+function canonicalizeMovement(movement = []) {
+  return movement.map((link) => {
+    const normalizedHref = canonicalizeHref(link && link.href);
+    let key = link ? link.key : '';
+    if (key && key.startsWith('move:') && normalizedHref) {
+      key = `move:${normalizedHref}`;
+    }
+    return {
+      ...link,
+      href: normalizedHref,
+      key,
+    };
+  });
+}
 
 function baseKeyIndex(baseKey) {
   return baseKey || '__no_key__';
@@ -97,7 +145,8 @@ function parseDirectionalLabel(text) {
 }
 
 function computeLocationKey(movement, hint) {
-  const parts = movement
+  const normalized = canonicalizeMovement(movement);
+  const parts = normalized
     .map(({ key, href, label }) => `${key}|${href || ''}|${label}`)
     .sort();
   if (hint) {
@@ -147,13 +196,19 @@ function loadState(storageKey) {
   }
   if (raw.nodes && typeof raw.nodes === 'object') {
     for (const [alias, node] of Object.entries(raw.nodes)) {
+      const linkMeta = toMap(node.linkMeta);
+      for (const meta of linkMeta.values()) {
+        if (meta && meta.href) {
+          meta.href = canonicalizeHref(meta.href);
+        }
+      }
       state.nodes.set(alias, {
         alias,
         baseKey: node.baseKey || null,
         baseHash: node.baseHash || null,
         lastHint: node.lastHint || null,
         neighbors: toMap(node.neighbors),
-        linkMeta: toMap(node.linkMeta),
+        linkMeta,
         tried: toSet(node.tried),
         visits: Number(node.visits) || 0,
         firstSeenAt: Number(node.firstSeenAt) || 0,
@@ -422,7 +477,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       }
       meta.direction = link.direction || meta.direction || null;
       meta.label = link.label || meta.label || link.key;
-      meta.href = link.href || meta.href || '';
+      meta.href = canonicalizeHref(link.href) || meta.href || '';
       meta.lastSeenAt = timestamp;
     }
     for (const key of Array.from(node.linkMeta.keys())) {
@@ -480,7 +535,8 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       node.visits += 1;
     }
     node.lastSeenAt = timestamp;
-    calibrateNeighbors(node, movement);
+    const normalizedMovement = canonicalizeMovement(movement);
+    calibrateNeighbors(node, normalizedMovement);
     if (pendingMove && pendingMove.fromKey) {
       const prevNode = ensureNode(pendingMove.fromKey);
       if (pendingMove.key) {
@@ -547,6 +603,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
 
   const selectNavigationMove = ({ movement, locationKey }) => {
     if (!movement.length || !locationKey) return null;
+    const normalizedMovement = canonicalizeMovement(movement);
     const node = state.nodes.get(locationKey);
     if (!node) return null;
     plannedRoute = plannedRoute.filter((step) => state.nodes.has(step.from) && state.nodes.has(step.to));
@@ -555,7 +612,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     }
     if (plannedRoute.length) {
       const step = plannedRoute.shift();
-      const link = movement.find(
+      const link = normalizedMovement.find(
         (item) => item.direction === step.direction && node.neighbors.get(step.direction) === step.to
       );
       if (link) {
@@ -578,7 +635,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       }
       plannedRoute = [];
     }
-    const sorted = [...movement].sort(
+    const sorted = [...normalizedMovement].sort(
       (a, b) => directionPriority(a.direction) - directionPriority(b.direction)
     );
     const untried = sorted.filter((link) => !node.tried.has(link.key));
@@ -660,5 +717,6 @@ export {
   PREFERRED_DIRECTION_ORDER,
   parseDirectionalLabel,
   computeLocationKey,
+  canonicalizeHref,
 };
 
