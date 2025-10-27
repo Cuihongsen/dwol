@@ -69,7 +69,7 @@ function buildNavigationContext(anchors) {
     const rawHref = el.getAttribute('href') || '';
     const href = canonicalizeHref(rawHref);
     const { direction, label } = parseDirectionalLabel(text);
-    const normalizedLabel = label || text;
+    const normalizedLabel = label && label.includes('树林') ? '树林' : label || text;
     const base = { el, text, direction, label: normalizedLabel, href };
 
     if (text.includes('攻击景阳岗')) {
@@ -80,7 +80,7 @@ function buildNavigationContext(anchors) {
       attack.push({ ...base, key: `boss:${href || normalizedLabel}` });
       continue;
     }
-    if (normalizedLabel.includes('树林')) {
+    if (normalizedLabel === '树林') {
       const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
       movement.push({ ...base, key });
       continue;

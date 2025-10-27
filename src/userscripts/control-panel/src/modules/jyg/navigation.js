@@ -172,26 +172,25 @@ function parseDirectionalLabel(text) {
     return { direction: null, label: '' };
   }
 
-  let direction = null;
-  let label = raw;
+  const withoutArrow = raw.replace(/([←→↑↓])\s*$/, '').trim();
+  const arrowMatch = raw.match(/([←→↑↓])\s*$/);
+  const arrow = arrowMatch && arrowMatch[1] ? arrowMatch[1] : null;
 
-  const prefixMatch = raw.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
+  let direction = null;
+  let label = withoutArrow;
+
+  const prefixMatch = withoutArrow.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
   if (prefixMatch) {
     direction = prefixMatch[1];
-    label = prefixMatch[2] ? prefixMatch[2].trim() : label;
+    label = prefixMatch[2] ? prefixMatch[2].trim() : '';
   }
 
-  const arrowMatch = raw.match(/(.+?)([←→↑↓])\s*$/);
-  if (arrowMatch) {
-    label = arrowMatch[1] ? arrowMatch[1].trim() : label;
-    const arrow = arrowMatch[2];
-    if (arrow && ARROW_DIRECTIONS[arrow]) {
-      direction = direction || ARROW_DIRECTIONS[arrow];
-    }
+  if (!direction && arrow && ARROW_DIRECTIONS[arrow]) {
+    direction = ARROW_DIRECTIONS[arrow];
   }
 
   if (!label) {
-    label = raw;
+    label = withoutArrow || raw;
   }
 
   return { direction, label };
@@ -772,59 +771,22 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     const normalizedMovement = canonicalizeMovement(movement);
     const node = state.nodes.get(locationKey);
     if (!node) return null;
-    plannedRoute = plannedRoute.filter((step) => state.nodes.has(step.from) && state.nodes.has(step.to));
-    if (!plannedRoute.length || plannedRoute[0].from !== locationKey) {
-      plannedRoute = findRouteToUntried(locationKey);
-    }
-    if (plannedRoute.length) {
-      const step = plannedRoute.shift();
-      const link = normalizedMovement.find(
-        (item) => item.direction === step.direction && node.neighbors.get(step.direction) === step.to
-      );
-      if (link) {
-        const returnDirection = step.direction ? DIRECTION_OPPOSITES[step.direction] || null : null;
-        pendingMove = {
-          fromKey: locationKey,
-          direction: step.direction || null,
-          key: link.key,
-          label: link.label,
-          href: link.href || '',
-          returnDirection,
-          createdAt: now(),
-        };
-        lastNavigationAction = {
-          fromKey: locationKey,
-          direction: step.direction || null,
-          label: link.direction ? `${link.label}(${link.direction})` : link.label,
-        };
-        const moveLabel = link.direction ? `${link.label}(${link.direction})` : link.label;
-        persist();
-        return { el: link.el, label: moveLabel, direction: link.direction || null };
-      }
-      plannedRoute = [];
-    }
-    const sorted = [...normalizedMovement].sort(
-      (a, b) => directionPriority(a.direction) - directionPriority(b.direction)
-    );
-    const untried = sorted.filter((link) => !node.tried.has(link.key));
-    let chosen = untried.length ? untried[0] : null;
-    if (!chosen) {
-      for (const link of sorted) {
-        const neighborKey = link.direction ? node.neighbors.get(link.direction) : null;
-        if (neighborKey) {
-          const neighbor = state.nodes.get(neighborKey);
-          if (neighbor && hasUntriedDirections(neighbor)) {
-            chosen = link;
-            break;
-          }
-        }
-      }
-    }
-    if (!chosen && sorted.length) {
-      chosen = sorted[0];
-    }
-    if (!chosen) return null;
     plannedRoute = [];
+
+    const forestMoves = normalizedMovement.filter((link) => link.label === '树林');
+    const forestUntried = forestMoves.filter((link) => !node.tried.has(link.key));
+
+    let candidates = forestUntried.length ? forestUntried : forestMoves;
+    if (!candidates.length) {
+      const untried = normalizedMovement.filter((link) => !node.tried.has(link.key));
+      candidates = untried.length ? untried : normalizedMovement;
+    }
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     const returnDirection = chosen.direction ? DIRECTION_OPPOSITES[chosen.direction] || null : null;
     pendingMove = {
       fromKey: locationKey,
