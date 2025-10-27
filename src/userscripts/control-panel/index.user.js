@@ -9,6 +9,8 @@
 
 (() => {
   var __defProp = Object.defineProperty;
+  var __defProps = Object.defineProperties;
+  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
   var __getOwnPropSymbols = Object.getOwnPropertySymbols;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
   var __propIsEnum = Object.prototype.propertyIsEnumerable;
@@ -24,6 +26,7 @@
       }
     return a;
   };
+  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
   var __export = (target, all) => {
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
@@ -523,6 +526,19 @@ tr:last-child td{border-bottom:none}
   var LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
   var LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
   var MODULE_ID2 = "jyg";
+  var DIRECTION_OPPOSITES = {
+    \u5DE6: "\u53F3",
+    \u53F3: "\u5DE6",
+    \u4E0A: "\u4E0B",
+    \u4E0B: "\u4E0A"
+  };
+  var PREFERRED_DIRECTION_ORDER = ["\u53F3", "\u4E0B", "\u5DE6", "\u4E0A"];
+  var ARROW_DIRECTIONS = {
+    "\u2190": "\u5DE6",
+    "\u2192": "\u53F3",
+    "\u2191": "\u4E0A",
+    "\u2193": "\u4E0B"
+  };
   var enabled2 = loadBoolean(LS_ENABLED2);
   var scanCount = 0;
   var clickCount = 0;
@@ -532,6 +548,277 @@ tr:last-child td{border-bottom:none}
   var lootTotals = {};
   var seenLoot = /* @__PURE__ */ new Set();
   var scanTimer = null;
+  var currentLocationKey = null;
+  var pendingMove = null;
+  var locationGraph = /* @__PURE__ */ new Map();
+  var navigationStack = [];
+  function parseDirectionalLabel(text) {
+    const raw = text ? text.trim() : "";
+    if (!raw) {
+      return { direction: null, label: "" };
+    }
+    let direction = null;
+    let label = raw;
+    const prefixMatch = raw.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
+    if (prefixMatch) {
+      direction = prefixMatch[1];
+      label = prefixMatch[2] ? prefixMatch[2].trim() : label;
+    }
+    const arrowMatch = raw.match(/(.+?)([←→↑↓])\s*$/);
+    if (arrowMatch) {
+      label = arrowMatch[1] ? arrowMatch[1].trim() : label;
+      const arrow = arrowMatch[2];
+      if (arrow && ARROW_DIRECTIONS[arrow]) {
+        direction = direction || ARROW_DIRECTIONS[arrow];
+      }
+    }
+    if (!label) {
+      label = raw;
+    }
+    return { direction, label };
+  }
+  function clearNavigationState() {
+    currentLocationKey = null;
+    pendingMove = null;
+    navigationStack = [];
+    locationGraph.clear();
+  }
+  function extractLocationHint() {
+    const candidates = [
+      document.querySelector("#ly_map strong"),
+      document.querySelector("#ly_map b"),
+      document.querySelector("#ly_map")
+    ];
+    for (const node of candidates) {
+      const text = node && node.textContent ? node.textContent.trim() : "";
+      if (text) {
+        return text.slice(0, 80);
+      }
+    }
+    const body = document.body ? document.body.innerText : "";
+    if (!body) return "";
+    const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (line.includes("\u666F\u9633\u5C97") || line.includes("\u6811\u6797")) {
+        return line.slice(0, 80);
+      }
+    }
+    return lines.length ? lines[0].slice(0, 80) : "";
+  }
+  function buildNavigationContext(anchors) {
+    const movement = [];
+    const attack = [];
+    const gather = [];
+    const misc = [];
+    for (const el of anchors) {
+      const text = el.textContent ? el.textContent.trim() : "";
+      if (!text) continue;
+      const href = el.getAttribute("href") || "";
+      const { direction, label } = parseDirectionalLabel(text);
+      const normalizedLabel = label || text;
+      const base = { el, text, direction, label: normalizedLabel, href };
+      if (text.includes("\u653B\u51FB\u666F\u9633\u5C97")) {
+        attack.push(__spreadProps(__spreadValues({}, base), { key: `attack:${href || normalizedLabel}` }));
+        continue;
+      }
+      if (!text.includes("\u653B\u51FB") && text.includes("\u666F\u9633\u5C97\u5927\u866B")) {
+        attack.push(__spreadProps(__spreadValues({}, base), { key: `boss:${href || normalizedLabel}` }));
+        continue;
+      }
+      if (normalizedLabel.includes("\u6811\u6797")) {
+        const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
+        movement.push(__spreadProps(__spreadValues({}, base), { key }));
+        continue;
+      }
+      if (text.includes("\u7075\u829D")) {
+        gather.push(__spreadProps(__spreadValues({}, base), { key: `loot:${href || normalizedLabel}` }));
+        continue;
+      }
+      if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
+        misc.push(__spreadProps(__spreadValues({}, base), { key: `return:${href || normalizedLabel}` }));
+        continue;
+      }
+    }
+    const hint = extractLocationHint();
+    const locationKey = computeLocationKey(movement, hint);
+    return {
+      allAnchors: anchors,
+      movement,
+      attack,
+      gather,
+      misc,
+      hint,
+      locationKey
+    };
+  }
+  function computeLocationKey(movement, hint) {
+    const parts = movement.map(({ key, href, label }) => `${key}|${href || ""}|${label}`).sort();
+    if (hint) {
+      parts.unshift(`hint:${hint}`);
+    }
+    if (!parts.length) {
+      return hint || null;
+    }
+    return parts.join("||");
+  }
+  function ensureGraphNode(key) {
+    if (!key) return null;
+    let node = locationGraph.get(key);
+    if (!node) {
+      node = {
+        tried: /* @__PURE__ */ new Set(),
+        directionMeta: /* @__PURE__ */ new Map(),
+        neighbors: /* @__PURE__ */ new Map()
+      };
+      locationGraph.set(key, node);
+    }
+    return node;
+  }
+  function registerNodeDirections(key, movement) {
+    const node = ensureGraphNode(key);
+    if (!node) return null;
+    node.directionMeta.clear();
+    for (const link of movement) {
+      node.directionMeta.set(link.key, {
+        direction: link.direction,
+        label: link.label,
+        href: link.href
+      });
+    }
+    return node;
+  }
+  function hasUntriedDirections(key) {
+    const node = key ? locationGraph.get(key) : null;
+    if (!node) return false;
+    for (const linkKey of node.directionMeta.keys()) {
+      if (!node.tried.has(linkKey)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function alignNavigationStack(fromKey, toKey, viaDirection) {
+    if (!fromKey || !toKey) {
+      navigationStack = [
+        {
+          nodeKey: toKey,
+          parentKey: null,
+          viaDirection: null,
+          returnDirection: null
+        }
+      ];
+      return;
+    }
+    const fromIndex = navigationStack.findIndex((entry) => entry.nodeKey === fromKey);
+    if (fromIndex === -1) {
+      navigationStack = [
+        {
+          nodeKey: toKey,
+          parentKey: null,
+          viaDirection: null,
+          returnDirection: null
+        }
+      ];
+      return;
+    }
+    const fromEntry = navigationStack[fromIndex];
+    const parentEntry = fromIndex > 0 ? navigationStack[fromIndex - 1] : null;
+    const expectedBack = fromEntry ? fromEntry.returnDirection : null;
+    if (parentEntry && parentEntry.nodeKey === toKey && expectedBack && viaDirection && expectedBack === viaDirection) {
+      navigationStack = navigationStack.slice(0, fromIndex);
+      return;
+    }
+    const returnDirection = viaDirection ? DIRECTION_OPPOSITES[viaDirection] || null : null;
+    navigationStack = navigationStack.slice(0, fromIndex + 1);
+    navigationStack.push({
+      nodeKey: toKey,
+      parentKey: fromKey,
+      viaDirection,
+      returnDirection
+    });
+  }
+  function handleLocationContext(context) {
+    const { locationKey, movement } = context;
+    if (!locationKey) {
+      clearNavigationState();
+      return;
+    }
+    if (locationKey !== currentLocationKey) {
+      const previousKey = currentLocationKey;
+      currentLocationKey = locationKey;
+      registerNodeDirections(locationKey, movement);
+      if (pendingMove && previousKey && pendingMove.fromKey === previousKey) {
+        const fromNode = locationGraph.get(previousKey);
+        if (fromNode && pendingMove.key) {
+          fromNode.tried.add(pendingMove.key);
+        }
+        if (fromNode && pendingMove.direction) {
+          fromNode.neighbors.set(pendingMove.direction, locationKey);
+        }
+      }
+      if (pendingMove && pendingMove.direction) {
+        const opposite = DIRECTION_OPPOSITES[pendingMove.direction];
+        if (opposite) {
+          const node = ensureGraphNode(locationKey);
+          if (node) {
+            node.neighbors.set(opposite, pendingMove.fromKey || null);
+          }
+        }
+      }
+      const moveDirection = pendingMove && pendingMove.direction ? pendingMove.direction : null;
+      alignNavigationStack(pendingMove ? pendingMove.fromKey : null, locationKey, moveDirection);
+      pendingMove = null;
+    } else {
+      registerNodeDirections(locationKey, movement);
+    }
+  }
+  function directionPriority(direction) {
+    if (!direction) return PREFERRED_DIRECTION_ORDER.length + 1;
+    const idx = PREFERRED_DIRECTION_ORDER.indexOf(direction);
+    return idx === -1 ? PREFERRED_DIRECTION_ORDER.length : idx;
+  }
+  function selectNavigationMove(context) {
+    const { movement, locationKey } = context;
+    if (!movement.length || !locationKey) return null;
+    const node = registerNodeDirections(locationKey, movement) || ensureGraphNode(locationKey);
+    if (!node) return null;
+    const sorted = [...movement].sort((a, b) => directionPriority(a.direction) - directionPriority(b.direction));
+    const untried = sorted.filter((link) => !node.tried.has(link.key));
+    let chosen = untried.length ? untried[0] : null;
+    if (!chosen) {
+      const entryIndex = navigationStack.findIndex((entry) => entry.nodeKey === locationKey);
+      if (entryIndex !== -1) {
+        const entry = navigationStack[entryIndex];
+        if (entry && entry.returnDirection) {
+          chosen = sorted.find((link) => link.direction === entry.returnDirection) || null;
+        }
+      }
+    }
+    if (!chosen) {
+      for (const link of sorted) {
+        const neighborKey = link.direction ? node.neighbors.get(link.direction) : null;
+        if (neighborKey && hasUntriedDirections(neighborKey)) {
+          chosen = link;
+          break;
+        }
+      }
+    }
+    if (!chosen && sorted.length) {
+      chosen = sorted[0];
+    }
+    if (!chosen) return null;
+    const returnDirection = chosen.direction ? DIRECTION_OPPOSITES[chosen.direction] || null : null;
+    pendingMove = {
+      fromKey: locationKey,
+      direction: chosen.direction || null,
+      key: chosen.key,
+      label: chosen.label,
+      href: chosen.href || "",
+      returnDirection
+    };
+    const moveLabel = chosen.direction ? `${chosen.label}(${chosen.direction})` : chosen.label;
+    return { el: chosen.el, label: moveLabel, direction: chosen.direction || null };
+  }
   function loadStats2() {
     let stats = loadJSON(LS_STATS2);
     if (!stats) {
@@ -586,6 +873,7 @@ tr:last-child td{border-bottom:none}
     refreshSeenLootSnapshot();
     saveStats2();
     updateUI2();
+    clearNavigationState();
   }
   function recordScan() {
     scanCount += 1;
@@ -704,42 +992,72 @@ tr:last-child td{border-bottom:none}
     safeText($("#jyg-targets"), formatBreakdown());
     safeText($("#jyg-loot"), formatLoot());
   }
-  function pickTarget(anchors) {
+  function pickTarget(context) {
+    const anchors = context.allAnchors;
     const byExact = (txt) => anchors.find((a) => a.textContent && a.textContent.trim() === txt);
     const byIncludes = (kw) => anchors.filter((a) => a.textContent && a.textContent.includes(kw));
     const attempts = [
       () => {
         const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-        return el ? { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B" } : null;
+        if (el) {
+          pendingMove = null;
+          return { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B" };
+        }
+        return null;
       },
       () => {
         const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B");
-        return el ? { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B" } : null;
+        if (el) {
+          pendingMove = null;
+          return { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B" };
+        }
+        return null;
       },
       () => {
         const el = byExact("\u666F\u9633\u5C97\u5927\u866B");
-        return el ? { el, label: "\u666F\u9633\u5C97\u5927\u866B" } : null;
+        if (el) {
+          pendingMove = null;
+          return { el, label: "\u666F\u9633\u5C97\u5927\u866B" };
+        }
+        return null;
       },
       () => {
         const el = byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-        return el ? { el, label: "\u666F\u9633\u5C97\u5C0F\u5927\u866B" } : null;
-      },
-      () => {
-        const arr = byIncludes("\u7075\u829D");
-        return arr && arr.length ? { el: arr[0], label: "\u7075\u829D" } : null;
-      },
-      () => {
-        const el = byExact("\u8FD4\u56DE\u6E38\u620F");
-        return el ? { el, label: "\u8FD4\u56DE\u6E38\u620F" } : null;
-      },
-      () => {
-        const woods = byIncludes("\u6811\u6797");
-        if (woods && woods.length) {
-          const idx = Math.floor(Math.random() * woods.length);
-          return { el: woods[idx], label: "\u6811\u6797(\u968F\u673A)" };
+        if (el) {
+          pendingMove = null;
+          return { el, label: "\u666F\u9633\u5C97\u5C0F\u5927\u866B" };
         }
         return null;
-      }
+      },
+      () => {
+        if (context.gather.length) {
+          const pick = context.gather[0];
+          pendingMove = null;
+          return { el: pick.el, label: pick.label };
+        }
+        const arr = byIncludes("\u7075\u829D");
+        if (arr && arr.length) {
+          pendingMove = null;
+          return { el: arr[0], label: "\u7075\u829D" };
+        }
+        return null;
+      },
+      () => {
+        if (context.misc.length) {
+          const ret = context.misc.find((item) => item.label.includes("\u8FD4\u56DE"));
+          if (ret) {
+            pendingMove = null;
+            return { el: ret.el, label: ret.label };
+          }
+        }
+        const el = byExact("\u8FD4\u56DE\u6E38\u620F");
+        if (el) {
+          pendingMove = null;
+          return { el, label: "\u8FD4\u56DE\u6E38\u620F" };
+        }
+        return null;
+      },
+      () => selectNavigationMove(context)
     ];
     for (const attempt of attempts) {
       const result = attempt();
@@ -756,7 +1074,9 @@ tr:last-child td{border-bottom:none}
       if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
       const anchors = $$("a");
       if (!anchors.length) return;
-      const result = pickTarget(anchors);
+      const context = buildNavigationContext(anchors);
+      handleLocationContext(context);
+      const result = pickTarget(context);
       recordScan();
       if (result) {
         result.el.click();
@@ -785,6 +1105,7 @@ tr:last-child td{border-bottom:none}
     saveStats2();
     updateUI2();
     announceState2();
+    clearNavigationState();
   }
   function toggleEnabled2() {
     if (enabled2) {

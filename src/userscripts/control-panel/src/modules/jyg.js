@@ -342,9 +342,6 @@ function selectNavigationMove(context) {
     href: chosen.href || '',
     returnDirection,
   };
-  if (node && !node.tried.has(chosen.key)) {
-    node.tried.add(chosen.key);
-  }
 
   const moveLabel = chosen.direction
     ? `${chosen.label}(${chosen.direction})`
