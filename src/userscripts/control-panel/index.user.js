@@ -59,7 +59,8 @@
   var LS_ACTIVE_MODULE = "um_active_module_v1";
   var MODULES = [
     { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
-    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" }
+    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" },
+    { id: "bc", title: "\u5237\u767D\u83DC", enabledKey: "bc_enabled_v1" }
   ];
   var navButtons = [];
   var sections = [];
@@ -161,8 +162,8 @@ tr:last-child td{border-bottom:none}
     if (stored && MODULES.some((mod) => mod.id === stored)) {
       return stored;
     }
-    const enabled3 = pickEnabledModule();
-    if (enabled3) return enabled3;
+    const enabled2 = pickEnabledModule();
+    if (enabled2) return enabled2;
     return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
   }
   function activate(moduleId, { persist = true } = {}) {
@@ -442,7 +443,7 @@ tr:last-child td{border-bottom:none}
   }
   function tryClickReturn() {
     if (!isPendingReturn()) return;
-    const start2 = now();
+    const start = now();
     const timer = setInterval(() => {
       const button = $$("a,button").find(
         (el) => el.textContent && el.textContent.trim() === "\u8FD4\u56DE\u6E38\u620F"
@@ -455,7 +456,7 @@ tr:last-child td{border-bottom:none}
           startRefreshing();
           startChecking();
         }
-      } else if (now() - start2 > 15e3) {
+      } else if (now() - start > 15e3) {
         setPendingReturn(false);
         clearInterval(timer);
         if (enabled) {
@@ -519,8 +520,7 @@ tr:last-child td{border-bottom:none}
     resume: () => resume2
   });
 
-  // src/userscripts/control-panel/src/modules/jyg/navigation.js
-  var STORAGE_KEY = "jyg_nav_state_v1";
+  // src/userscripts/control-panel/src/modules/explore/navigation.js
   var PENDING_MOVE_TTL_MS = 2 * 60 * 1e3;
   var VOLATILE_QUERY_PARAMS = /* @__PURE__ */ new Set(["sid"]);
   var DIRECTION_OPPOSITES = {
@@ -851,7 +851,11 @@ tr:last-child td{border-bottom:none}
     }
     return parts.join(" / ");
   }
-  function createNavigator({ storageKey = STORAGE_KEY, logger = console } = {}) {
+  function createNavigator({ storageKey, logger = console, tag = "NAV" } = {}) {
+    if (!storageKey) {
+      throw new Error("createNavigator requires a storageKey");
+    }
+    const prefix = `[${tag}]`;
     let state = loadState(storageKey);
     let currentLocationKey = null;
     let pendingMove = state.pendingMove ? __spreadValues({}, state.pendingMove) : null;
@@ -897,7 +901,7 @@ tr:last-child td{border-bottom:none}
       const alias = `loc#${state.nextLocationId++}`;
       if (logger && typeof logger.debug === "function") {
         const preview = baseKey && baseKey.length > 120 ? `${baseKey.slice(0, 117)}\u2026` : baseKey;
-        logger.debug("[JYG] \u521B\u5EFA\u65B0\u4F4D\u7F6E", alias, {
+        logger.debug(`${prefix} \u521B\u5EFA\u65B0\u4F4D\u7F6E`, alias, {
           baseKey: preview,
           hint
         });
@@ -954,7 +958,7 @@ tr:last-child td{border-bottom:none}
           if (signatureMatches.length === 1) {
             registerAlias(signatureMatches[0], baseKey);
             if (logger && typeof logger.debug === "function") {
-              logger.debug("[JYG] \u901A\u8FC7\u51FA\u5165\u53E3\u6307\u7EB9\u6821\u51C6\u4F4D\u7F6E", signatureMatches[0], {
+              logger.debug(`${prefix} \u901A\u8FC7\u51FA\u5165\u53E3\u6307\u7EB9\u6821\u51C6\u4F4D\u7F6E`, signatureMatches[0], {
                 baseHash: hashKey(baseKey)
               });
             }
@@ -972,7 +976,7 @@ tr:last-child td{border-bottom:none}
           if (hintMatches.length === 1) {
             registerAlias(hintMatches[0], baseKey);
             if (logger && typeof logger.debug === "function") {
-              logger.debug("[JYG] \u901A\u8FC7\u5730\u70B9\u63D0\u793A\u6821\u51C6\u4F4D\u7F6E", hintMatches[0], {
+              logger.debug(`${prefix} \u901A\u8FC7\u5730\u70B9\u63D0\u793A\u6821\u51C6\u4F4D\u7F6E`, hintMatches[0], {
                 baseHash: hashKey(baseKey),
                 hint
               });
@@ -987,14 +991,14 @@ tr:last-child td{border-bottom:none}
         if (resolved) {
           registerAlias(resolved, baseKey);
           if (logger && typeof logger.debug === "function") {
-            logger.debug("[JYG] \u901A\u8FC7\u6700\u8FD1\u8BBF\u95EE\u8BB0\u5F55\u63A8\u65AD\u4F4D\u7F6E", resolved, {
+            logger.debug(`${prefix} \u901A\u8FC7\u6700\u8FD1\u8BBF\u95EE\u8BB0\u5F55\u63A8\u65AD\u4F4D\u7F6E`, resolved, {
               baseHash: hashKey(baseKey)
             });
           }
           return resolved;
         }
         if (logger && typeof logger.warn === "function") {
-          logger.warn("[JYG] \u65E0\u6CD5\u6839\u636E\u90BB\u63A5\u5173\u7CFB\u89E3\u6790\u4F4D\u7F6E\uFF0C\u521B\u5EFA\u65B0\u522B\u540D", {
+          logger.warn(`${prefix} \u65E0\u6CD5\u6839\u636E\u90BB\u63A5\u5173\u7CFB\u89E3\u6790\u4F4D\u7F6E\uFF0C\u521B\u5EFA\u65B0\u522B\u540D`, {
             baseHash: hashKey(baseKey),
             fromKey,
             direction,
@@ -1097,7 +1101,7 @@ tr:last-child td{border-bottom:none}
       const normalizedMovement = canonicalizeMovement(movement);
       if (!normalizedMovement.length) {
         if (logger && typeof logger.debug === "function") {
-          logger.debug("[JYG] \u8DF3\u8FC7\u65E0\u51FA\u5165\u53E3\u7684\u9875\u9762", {
+          logger.debug(`${prefix} \u8DF3\u8FC7\u65E0\u51FA\u5165\u53E3\u7684\u9875\u9762`, {
             hint: shortenHint(hint),
             pendingMove: pendingMove ? pendingMove.direction || pendingMove.key : null
           });
@@ -1208,7 +1212,7 @@ tr:last-child td{border-bottom:none}
       steps.reverse();
       return steps;
     };
-    const selectNavigationMove2 = ({ movement, locationKey }) => {
+    const selectNavigationMove = ({ movement, locationKey }) => {
       if (!movement.length || !locationKey) return null;
       const normalizedMovement = canonicalizeMovement(movement);
       const node = state.nodes.get(locationKey);
@@ -1269,7 +1273,7 @@ tr:last-child td{border-bottom:none}
       resetRuntime,
       resetAll,
       handleContext,
-      selectNavigationMove: selectNavigationMove2,
+      selectNavigationMove,
       getTelemetry,
       parseDirectionalLabel,
       computeLocationKey,
@@ -1280,27 +1284,12 @@ tr:last-child td{border-bottom:none}
     };
   }
 
-  // src/userscripts/control-panel/src/modules/jyg.js
+  // src/userscripts/control-panel/src/modules/explore/mapModuleFactory.js
   var SCAN_MS = 400;
   var CLICK_COOLDOWN_MS = 1e3;
-  var LS_ENABLED2 = "jyg_enabled_v1";
-  var LS_STATS2 = "jyg_stats_v3";
-  var LS_STATS_LEGACY = ["jyg_stats_v2"];
   var LOOT_BLOCK_REGEX = /捡到[^\n\r]*/g;
   var LOOT_ITEM_REGEX = /(.+?)x(\d+)$/;
-  var MODULE_ID2 = "jyg";
-  var navigator = createNavigator();
-  var enabled2 = loadBoolean(LS_ENABLED2);
-  var scanCount = 0;
-  var clickCount = 0;
-  var lastClickAt = 0;
-  var lastTarget = "-";
-  var targetBreakdown = {};
-  var lootTotals = {};
-  var seenLoot = /* @__PURE__ */ new Set();
-  var scanTimer = null;
-  var lastTelemetryDigest = null;
-  function extractLocationHint() {
+  function defaultExtractLocationHint(keywords = []) {
     const candidates = [
       document.querySelector("#ly_map strong"),
       document.querySelector("#ly_map b"),
@@ -1315,413 +1304,578 @@ tr:last-child td{border-bottom:none}
     const body = document.body ? document.body.innerText : "";
     if (!body) return "";
     const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const normalizedKeywords = Array.isArray(keywords) ? keywords.filter((kw) => typeof kw === "string" && kw) : [];
     for (const line of lines) {
-      if (line.includes("\u666F\u9633\u5C97") || line.includes("\u6811\u6797")) {
+      if (normalizedKeywords.some((kw) => line.includes(kw))) {
         return line.slice(0, 80);
       }
     }
     return lines.length ? lines[0].slice(0, 80) : "";
   }
-  function buildNavigationContext(anchors) {
-    const movement = [];
-    const attack = [];
-    const gather = [];
-    const misc = [];
-    for (const el of anchors) {
-      const text = el.textContent ? el.textContent.trim() : "";
-      if (!text) continue;
-      const rawHref = el.getAttribute("href") || "";
-      const href = canonicalizeHref(rawHref);
-      const { direction, label } = parseDirectionalLabel(text);
-      const normalizedLabel = label && label.includes("\u6811\u6797") ? "\u6811\u6797" : label || text;
-      const base = { el, text, direction, label: normalizedLabel, href };
-      if (text.includes("\u653B\u51FB\u666F\u9633\u5C97")) {
-        attack.push(__spreadProps(__spreadValues({}, base), { key: `attack:${href || normalizedLabel}` }));
-        continue;
-      }
-      if (!text.includes("\u653B\u51FB") && text.includes("\u666F\u9633\u5C97\u5927\u866B")) {
-        attack.push(__spreadProps(__spreadValues({}, base), { key: `boss:${href || normalizedLabel}` }));
-        continue;
-      }
-      if (normalizedLabel === "\u6811\u6797") {
-        const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
-        movement.push(__spreadProps(__spreadValues({}, base), { key }));
-        continue;
-      }
-      if (text.includes("\u7075\u829D")) {
-        gather.push(__spreadProps(__spreadValues({}, base), { key: `loot:${href || normalizedLabel}` }));
-        continue;
-      }
-      if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
-        misc.push(__spreadProps(__spreadValues({}, base), { key: `return:${href || normalizedLabel}` }));
-        continue;
-      }
-    }
-    const hint = extractLocationHint();
-    const baseLocationKey = computeLocationKey(movement, hint);
+  function createTargetRuleHelpers({ navigator, selectNavigationMove }) {
+    const textContent = (node) => node && node.textContent ? node.textContent.trim() : "";
     return {
-      allAnchors: anchors,
-      movement,
-      attack,
-      gather,
-      misc,
-      hint,
-      baseLocationKey,
-      locationKey: baseLocationKey
+      byExact(text, { label = text, markMoveFailure = true } = {}) {
+        return ({ anchors }) => {
+          const target = anchors.find((anchor) => textContent(anchor) === text);
+          if (!target) return null;
+          if (markMoveFailure) navigator.markMoveFailure();
+          return { el: target, label };
+        };
+      },
+      byIncludes(keyword, { label = keyword, markMoveFailure = true } = {}) {
+        return ({ anchors }) => {
+          const target = anchors.find(
+            (anchor) => anchor && anchor.textContent && anchor.textContent.includes(keyword)
+          );
+          if (!target) return null;
+          if (markMoveFailure) navigator.markMoveFailure();
+          return { el: target, label };
+        };
+      },
+      byContextFirst(group, { markMoveFailure = true } = {}) {
+        return ({ context }) => {
+          const list = context[group];
+          if (!Array.isArray(list) || !list.length) return null;
+          const pick = list[0];
+          if (!pick) return null;
+          if (markMoveFailure) navigator.markMoveFailure();
+          return { el: pick.el, label: pick.label };
+        };
+      },
+      byContextFind(group, predicate, { markMoveFailure = true, label } = {}) {
+        return ({ context }) => {
+          const list = context[group];
+          if (!Array.isArray(list) || !list.length) return null;
+          const found = typeof predicate === "function" ? list.find(predicate) : list[0];
+          if (!found) return null;
+          if (markMoveFailure) navigator.markMoveFailure();
+          return { el: found.el, label: label || found.label };
+        };
+      },
+      navigationFallback() {
+        return ({ context }) => selectNavigationMove(context);
+      }
     };
   }
-  function handleLocationContext(context) {
-    const { baseLocationKey, movement, hint } = context;
-    const resolvedKey = navigator.handleContext({ baseLocationKey, movement, hint });
-    context.locationKey = resolvedKey;
-  }
-  function selectNavigationMove(context) {
-    return navigator.selectNavigationMove({
+  function createMapModule(config = {}) {
+    const { moduleId, storageKeys = {}, ui = {}, telemetryTag, navigation = {} } = config;
+    if (!moduleId) {
+      throw new Error("createMapModule requires a moduleId");
+    }
+    if (!storageKeys.enabled || !storageKeys.stats) {
+      throw new Error("createMapModule requires storageKeys.enabled and storageKeys.stats");
+    }
+    if (!navigation.storageKey) {
+      throw new Error("createMapModule requires navigation.storageKey");
+    }
+    if (typeof navigation.classifyAnchor !== "function") {
+      throw new Error("createMapModule requires navigation.classifyAnchor");
+    }
+    const prefix = ui.prefix || moduleId;
+    const statsLegacyKeys = Array.isArray(storageKeys.legacy) ? storageKeys.legacy : [];
+    const logTag = telemetryTag || moduleId.toUpperCase();
+    const navigator = createNavigator({
+      storageKey: navigation.storageKey,
+      logger: navigation.logger,
+      tag: navigation.tag || logTag
+    });
+    const selectMove = (context) => navigator.selectNavigationMove({
       movement: context.movement,
       locationKey: context.locationKey
     });
-  }
-  function loadStats2() {
-    let stats = loadJSON(LS_STATS2);
-    if (!stats) {
-      for (const key of LS_STATS_LEGACY) {
-        stats = loadJSON(key);
-        if (stats) break;
+    const targetHelpers = createTargetRuleHelpers({ navigator, selectNavigationMove: selectMove });
+    let targetingRules = [];
+    if (Array.isArray(config.targetingRules)) {
+      targetingRules = config.targetingRules;
+    } else if (typeof config.buildTargetingRules === "function") {
+      const built = config.buildTargetingRules(targetHelpers);
+      targetingRules = Array.isArray(built) ? built : [];
+    }
+    if (!targetingRules.length) {
+      targetingRules = [targetHelpers.navigationFallback()];
+    }
+    const normalizeLabel = typeof navigation.normalizeLabel === "function" ? navigation.normalizeLabel : (label, text) => label || text;
+    const extractHint = typeof config.extractLocationHint === "function" ? config.extractLocationHint : () => defaultExtractLocationHint(config.locationHintKeywords);
+    let enabled2 = loadBoolean(storageKeys.enabled);
+    let scanCount = 0;
+    let clickCount = 0;
+    let lastClickAt = 0;
+    let lastTarget = "-";
+    let targetBreakdown = {};
+    let lootTotals = {};
+    let seenLoot = /* @__PURE__ */ new Set();
+    let scanTimer = null;
+    let lastTelemetryDigest = null;
+    function loadStats2() {
+      let stats = loadJSON(storageKeys.stats);
+      if (!stats) {
+        for (const key of statsLegacyKeys) {
+          stats = loadJSON(key);
+          if (stats) break;
+        }
+      }
+      if (!stats) return;
+      scanCount = Number(stats.scanCount) || 0;
+      clickCount = Number(stats.clickCount) || 0;
+      lastClickAt = typeof stats.lastClickAt === "number" ? stats.lastClickAt : 0;
+      lastTarget = stats.lastTarget ? String(stats.lastTarget) : "-";
+      targetBreakdown = stats.targetBreakdown && typeof stats.targetBreakdown === "object" ? __spreadValues({}, stats.targetBreakdown) : {};
+      lootTotals = stats.lootTotals && typeof stats.lootTotals === "object" ? __spreadValues({}, stats.lootTotals) : {};
+    }
+    function saveStats2() {
+      saveJSON(storageKeys.stats, {
+        scanCount,
+        clickCount,
+        lastClickAt,
+        lastTarget,
+        targetBreakdown,
+        lootTotals
+      });
+    }
+    function announceState2() {
+      emitModuleState({ moduleId, enabled: enabled2 });
+    }
+    function refreshSeenLootSnapshot() {
+      seenLoot = /* @__PURE__ */ new Set();
+      const text = document.body ? document.body.innerText : "";
+      if (!text) return;
+      LOOT_BLOCK_REGEX.lastIndex = 0;
+      const blocks = text.matchAll(LOOT_BLOCK_REGEX);
+      for (const block of blocks) {
+        const fullBlock = block[0] ? block[0].trim() : "";
+        if (!fullBlock || fullBlock.length <= 2) continue;
+        const entries = fullBlock.slice(2).split(/[;；]+/).map((entry) => entry.trim()).filter(Boolean);
+        for (const entry of entries) {
+          seenLoot.add(`\u6361\u5230${entry}`);
+        }
       }
     }
-    if (!stats) return;
-    scanCount = Number(stats.scanCount) || 0;
-    clickCount = Number(stats.clickCount) || 0;
-    lastClickAt = typeof stats.lastClickAt === "number" ? stats.lastClickAt : 0;
-    lastTarget = stats.lastTarget ? String(stats.lastTarget) : "-";
-    targetBreakdown = stats.targetBreakdown && typeof stats.targetBreakdown === "object" ? __spreadValues({}, stats.targetBreakdown) : {};
-    lootTotals = stats.lootTotals && typeof stats.lootTotals === "object" ? __spreadValues({}, stats.lootTotals) : {};
-  }
-  function saveStats2() {
-    saveJSON(LS_STATS2, {
-      scanCount,
-      clickCount,
-      lastClickAt,
-      lastTarget,
-      targetBreakdown,
-      lootTotals
-    });
-  }
-  function announceState2() {
-    emitModuleState({ moduleId: MODULE_ID2, enabled: enabled2 });
-  }
-  function refreshSeenLootSnapshot() {
-    seenLoot = /* @__PURE__ */ new Set();
-    const text = document.body ? document.body.innerText : "";
-    if (!text) return;
-    LOOT_BLOCK_REGEX.lastIndex = 0;
-    const blocks = text.matchAll(LOOT_BLOCK_REGEX);
-    for (const block of blocks) {
-      const fullBlock = block[0] ? block[0].trim() : "";
-      if (!fullBlock || fullBlock.length <= 2) continue;
-      const entries = fullBlock.slice(2).split(/[;；]+/).map((entry) => entry.trim()).filter(Boolean);
-      for (const entry of entries) {
-        seenLoot.add(`\u6361\u5230${entry}`);
-      }
-    }
-  }
-  function resetStats2() {
-    scanCount = 0;
-    clickCount = 0;
-    lastClickAt = 0;
-    lastTarget = "-";
-    targetBreakdown = {};
-    lootTotals = {};
-    refreshSeenLootSnapshot();
-    saveStats2();
-    updateUI2();
-    navigator.resetRuntime();
-    lastTelemetryDigest = null;
-  }
-  function recordScan() {
-    scanCount += 1;
-    saveStats2();
-  }
-  function recordClick(targetLabel) {
-    clickCount += 1;
-    lastClickAt = now();
-    lastTarget = targetLabel;
-    if (targetLabel) {
-      targetBreakdown[targetLabel] = (targetBreakdown[targetLabel] || 0) + 1;
-    }
-    saveStats2();
-  }
-  function recordLoot(text) {
-    if (!text) return;
-    let updated = false;
-    LOOT_BLOCK_REGEX.lastIndex = 0;
-    const blocks = text.matchAll(LOOT_BLOCK_REGEX);
-    for (const block of blocks) {
-      const fullBlock = block[0] ? block[0].trim() : "";
-      if (!fullBlock || fullBlock.length <= 2) continue;
-      const entries = fullBlock.slice(2).split(/[;；]+/).map((entry) => entry.trim()).filter(Boolean);
-      for (const entry of entries) {
-        const match = entry.match(LOOT_ITEM_REGEX);
-        if (!match) continue;
-        const key = `\u6361\u5230${entry}`;
-        if (seenLoot.has(key)) continue;
-        seenLoot.add(key);
-        const label = match[1] ? match[1].trim() : "";
-        const count = Number(match[2]) || 0;
-        if (!label || !count) continue;
-        lootTotals[label] = (lootTotals[label] || 0) + count;
-        updated = true;
-      }
-    }
-    if (updated) {
+    function resetStats2() {
+      scanCount = 0;
+      clickCount = 0;
+      lastClickAt = 0;
+      lastTarget = "-";
+      targetBreakdown = {};
+      lootTotals = {};
+      refreshSeenLootSnapshot();
       saveStats2();
       updateUI2();
+      navigator.resetRuntime();
+      lastTelemetryDigest = null;
     }
-  }
-  function formatBreakdown() {
-    const entries = Object.entries(targetBreakdown);
-    if (!entries.length) return "-";
-    return entries.sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}\xD7${count}`).join(" / ");
-  }
-  function formatLoot() {
-    const entries = Object.entries(lootTotals);
-    if (!entries.length) return "-";
-    return entries.sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}\xD7${count}`).join(" / ");
-  }
-  function mountUI2() {
-    const body = $("#jyg-body");
-    if (!body) return;
-    body.innerHTML = `
+    function recordScan() {
+      scanCount += 1;
+      saveStats2();
+    }
+    function recordClick(targetLabel) {
+      clickCount += 1;
+      lastClickAt = now();
+      lastTarget = targetLabel;
+      if (targetLabel) {
+        targetBreakdown[targetLabel] = (targetBreakdown[targetLabel] || 0) + 1;
+      }
+      saveStats2();
+    }
+    function recordLoot(text) {
+      if (!text) return;
+      let updated = false;
+      LOOT_BLOCK_REGEX.lastIndex = 0;
+      const blocks = text.matchAll(LOOT_BLOCK_REGEX);
+      for (const block of blocks) {
+        const fullBlock = block[0] ? block[0].trim() : "";
+        if (!fullBlock || fullBlock.length <= 2) continue;
+        const entries = fullBlock.slice(2).split(/[;；]+/).map((entry) => entry.trim()).filter(Boolean);
+        for (const entry of entries) {
+          const match = entry.match(LOOT_ITEM_REGEX);
+          if (!match) continue;
+          const key = `\u6361\u5230${entry}`;
+          if (seenLoot.has(key)) continue;
+          seenLoot.add(key);
+          const label = match[1] ? match[1].trim() : "";
+          const count = Number(match[2]) || 0;
+          if (!label || !count) continue;
+          lootTotals[label] = (lootTotals[label] || 0) + count;
+          updated = true;
+        }
+      }
+      if (updated) {
+        saveStats2();
+        updateUI2();
+      }
+    }
+    function formatBreakdown() {
+      const entries = Object.entries(targetBreakdown);
+      if (!entries.length) return "-";
+      return entries.sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}\xD7${count}`).join(" / ");
+    }
+    function formatLoot() {
+      const entries = Object.entries(lootTotals);
+      if (!entries.length) return "-";
+      return entries.sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label}\xD7${count}`).join(" / ");
+    }
+    function mountUI2() {
+      const body = $(`#${prefix}-body`);
+      if (!body) return;
+      body.innerHTML = `
     <div class="kv"><span class="label" data-label="\u72B6\u6001"></span><span
-        id="jyg-status"
+        id="${prefix}-status"
         class="value state"
         data-state="${enabled2 ? "on" : "off"}"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u70B9\u51FB\u6B21\u6570"></span><span
-        id="jyg-clicks"
+        id="${prefix}-clicks"
         class="value"
         data-value="0"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u76EE\u6807"></span><span
-        id="jyg-last-target"
+        id="${prefix}-last-target"
         class="value"
         data-value="-"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u70B9\u51FB"></span><span
-        id="jyg-last"
+        id="${prefix}-last"
         class="value"
         data-value="-"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u8F6E\u8BE2\u6B21\u6570"></span><span
-        id="jyg-scans"
+        id="${prefix}-scans"
         class="value"
         data-value="0"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u76EE\u6807\u7EDF\u8BA1"></span><span
-        id="jyg-targets"
+        id="${prefix}-targets"
         class="value"
         data-value="-"
       ></span></div>
     <div class="kv"><span class="label" data-label="\u6389\u843D\u7EDF\u8BA1"></span><span
-        id="jyg-loot"
+        id="${prefix}-loot"
         class="value"
         data-value="-"
       ></span></div>
   `;
-    const toggle = $("#jyg-toggle");
-    if (toggle) {
-      toggle.onclick = () => toggleEnabled2();
+      const toggle = $(`#${prefix}-toggle`);
+      if (toggle) {
+        toggle.onclick = () => toggleEnabled2();
+      }
+      const reset = $(`#${prefix}-reset`);
+      if (reset) {
+        reset.onclick = () => resetStats2();
+      }
+      updateUI2();
     }
-    const reset = $("#jyg-reset");
-    if (reset) {
-      reset.onclick = () => resetStats2();
+    function logTelemetry(telemetry) {
+      if (!telemetry) return;
+      const snapshot = JSON.stringify({
+        key: telemetry.currentLocationKey || null,
+        location: telemetry.locationLabel || "-",
+        directions: telemetry.directionSummary || "-",
+        stack: telemetry.stackSummary || "-",
+        pending: telemetry.pendingAction || "-",
+        route: telemetry.plannedRoute || "-",
+        nodes: telemetry.locationCount || 0
+      });
+      if (snapshot === lastTelemetryDigest) {
+        return;
+      }
+      lastTelemetryDigest = snapshot;
+      console.info(`[${logTag}] \u5BFC\u822A\u9065\u6D4B`, {
+        key: telemetry.currentLocationKey || null,
+        location: telemetry.locationLabel || "-",
+        directions: telemetry.directionSummary || "-",
+        stack: telemetry.stackSummary || "-",
+        pending: telemetry.pendingAction || "-",
+        route: telemetry.plannedRoute || "-",
+        nodes: telemetry.locationCount || 0
+      });
     }
-    updateUI2();
-  }
-  function logTelemetry(telemetry) {
-    if (!telemetry) return;
-    const snapshot = JSON.stringify({
-      key: telemetry.currentLocationKey || null,
-      location: telemetry.locationLabel || "-",
-      directions: telemetry.directionSummary || "-",
-      stack: telemetry.stackSummary || "-",
-      pending: telemetry.pendingAction || "-",
-      route: telemetry.plannedRoute || "-",
-      nodes: telemetry.locationCount || 0
-    });
-    if (snapshot === lastTelemetryDigest) {
-      return;
+    function updateUI2() {
+      const status = $(`#${prefix}-status`);
+      if (status) {
+        status.dataset.state = enabled2 ? "on" : "off";
+      }
+      const toggle = $(`#${prefix}-toggle`);
+      if (toggle) {
+        toggle.dataset.mode = enabled2 ? "on" : "off";
+        toggle.setAttribute("aria-pressed", enabled2 ? "true" : "false");
+      }
+      safeText($(`#${prefix}-clicks`), clickCount);
+      safeText($(`#${prefix}-last-target`), lastTarget || "-");
+      safeText($(`#${prefix}-last`), formatTime(lastClickAt));
+      safeText($(`#${prefix}-scans`), scanCount);
+      safeText($(`#${prefix}-targets`), formatBreakdown());
+      safeText($(`#${prefix}-loot`), formatLoot());
+      logTelemetry(navigator.getTelemetry());
     }
-    lastTelemetryDigest = snapshot;
-    console.info("[JYG] \u5BFC\u822A\u9065\u6D4B", {
-      key: telemetry.currentLocationKey || null,
-      location: telemetry.locationLabel || "-",
-      directions: telemetry.directionSummary || "-",
-      stack: telemetry.stackSummary || "-",
-      pending: telemetry.pendingAction || "-",
-      route: telemetry.plannedRoute || "-",
-      nodes: telemetry.locationCount || 0
-    });
-  }
-  function updateUI2() {
-    const status = $("#jyg-status");
-    if (status) {
-      status.dataset.state = enabled2 ? "on" : "off";
+    function extractLocationHint() {
+      return extractHint();
     }
-    const toggle = $("#jyg-toggle");
-    if (toggle) {
-      toggle.dataset.mode = enabled2 ? "on" : "off";
-      toggle.setAttribute("aria-pressed", enabled2 ? "true" : "false");
-    }
-    safeText($("#jyg-clicks"), clickCount);
-    safeText($("#jyg-last-target"), lastTarget || "-");
-    safeText($("#jyg-last"), formatTime(lastClickAt));
-    safeText($("#jyg-scans"), scanCount);
-    safeText($("#jyg-targets"), formatBreakdown());
-    safeText($("#jyg-loot"), formatLoot());
-    const telemetry = navigator.getTelemetry();
-    logTelemetry(telemetry);
-  }
-  function pickTarget(context) {
-    const anchors = context.allAnchors;
-    const byExact = (txt) => anchors.find((a) => a.textContent && a.textContent.trim() === txt);
-    const byIncludes = (kw) => anchors.filter((a) => a.textContent && a.textContent.includes(kw));
-    const attempts = [
-      () => {
-        const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-        if (el) {
-          navigator.markMoveFailure();
-          return { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B" };
-        }
-        return null;
-      },
-      () => {
-        const el = byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B");
-        if (el) {
-          navigator.markMoveFailure();
-          return { el, label: "\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B" };
-        }
-        return null;
-      },
-      () => {
-        const el = byExact("\u666F\u9633\u5C97\u5927\u866B");
-        if (el) {
-          navigator.markMoveFailure();
-          return { el, label: "\u666F\u9633\u5C97\u5927\u866B" };
-        }
-        return null;
-      },
-      () => {
-        const el = byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B");
-        if (el) {
-          navigator.markMoveFailure();
-          return { el, label: "\u666F\u9633\u5C97\u5C0F\u5927\u866B" };
-        }
-        return null;
-      },
-      () => {
-        if (context.gather.length) {
-          const pick = context.gather[0];
-          navigator.markMoveFailure();
-          return { el: pick.el, label: pick.label };
-        }
-        const arr = byIncludes("\u7075\u829D");
-        if (arr && arr.length) {
-          navigator.markMoveFailure();
-          return { el: arr[0], label: "\u7075\u829D" };
-        }
-        return null;
-      },
-      () => {
-        if (context.misc.length) {
-          const ret = context.misc.find((item) => item.label.includes("\u8FD4\u56DE"));
-          if (ret) {
-            navigator.markMoveFailure();
-            return { el: ret.el, label: ret.label };
+    function buildNavigationContext(anchors) {
+      const movement = [];
+      const attack = [];
+      const gather = [];
+      const misc = [];
+      for (const el of anchors) {
+        const text = el && el.textContent ? el.textContent.trim() : "";
+        if (!text) continue;
+        const rawHref = el.getAttribute("href") || "";
+        const href = canonicalizeHref(rawHref);
+        const { direction, label } = parseDirectionalLabel(text);
+        const normalizedLabel = normalizeLabel(label, text, el) || label || text;
+        const base = {
+          el,
+          text,
+          direction,
+          href,
+          rawLabel: label,
+          normalizedLabel,
+          label: normalizedLabel
+        };
+        const classification = navigation.classifyAnchor(__spreadValues({}, base));
+        const items = Array.isArray(classification) ? classification.filter(Boolean) : classification ? [classification] : [];
+        for (const item of items) {
+          const entry = __spreadProps(__spreadValues({}, base), {
+            key: item.key || `${item.group || "misc"}:${href || normalizedLabel}`,
+            label: item.label || normalizedLabel
+          });
+          switch (item.group) {
+            case "movement":
+              movement.push(entry);
+              break;
+            case "attack":
+              attack.push(entry);
+              break;
+            case "gather":
+              gather.push(entry);
+              break;
+            case "misc":
+            default:
+              misc.push(entry);
+              break;
           }
         }
-        const el = byExact("\u8FD4\u56DE\u6E38\u620F");
-        if (el) {
-          navigator.markMoveFailure();
-          return { el, label: "\u8FD4\u56DE\u6E38\u620F" };
+      }
+      const hint = extractLocationHint();
+      const baseLocationKey = computeLocationKey(movement, hint);
+      return {
+        allAnchors: anchors,
+        movement,
+        attack,
+        gather,
+        misc,
+        hint,
+        baseLocationKey,
+        locationKey: baseLocationKey
+      };
+    }
+    function handleLocationContext(context) {
+      const { baseLocationKey, movement, hint } = context;
+      const resolvedKey = navigator.handleContext({ baseLocationKey, movement, hint });
+      context.locationKey = resolvedKey;
+    }
+    function pickTarget(context) {
+      const params = { anchors: context.allAnchors, context };
+      for (const rule of targetingRules) {
+        if (typeof rule !== "function") continue;
+        const result = rule(params);
+        if (result) return result;
+      }
+      return null;
+    }
+    function start() {
+      stop();
+      scanTimer = setInterval(() => {
+        if (!enabled2) return;
+        const text = document.body ? document.body.innerText : "";
+        if (text) recordLoot(text);
+        if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
+        const anchors = $$("a");
+        if (!anchors.length) return;
+        const context = buildNavigationContext(anchors);
+        handleLocationContext(context);
+        const result = pickTarget(context);
+        recordScan();
+        if (result && result.el) {
+          result.el.click();
+          recordClick(result.label);
+          updateUI2();
+        } else {
+          updateUI2();
+        }
+      }, SCAN_MS);
+    }
+    function stop() {
+      if (scanTimer) clearInterval(scanTimer);
+      scanTimer = null;
+    }
+    function enable2() {
+      enabled2 = true;
+      saveBoolean(storageKeys.enabled, true);
+      start();
+      updateUI2();
+      announceState2();
+    }
+    function disable2() {
+      enabled2 = false;
+      saveBoolean(storageKeys.enabled, false);
+      stop();
+      saveStats2();
+      updateUI2();
+      announceState2();
+      navigator.resetRuntime();
+      lastTelemetryDigest = null;
+    }
+    function toggleEnabled2() {
+      if (enabled2) {
+        disable2();
+      } else {
+        enable2();
+      }
+    }
+    function init5() {
+      loadStats2();
+      mountUI2();
+      announceState2();
+      if (enabled2) {
+        start();
+      }
+    }
+    function pause4() {
+      stop();
+      saveStats2();
+    }
+    function resume4() {
+      if (enabled2) {
+        start();
+      }
+    }
+    return {
+      init: init5,
+      pause: pause4,
+      resume: resume4
+    };
+  }
+
+  // src/userscripts/control-panel/src/modules/jyg.js
+  var module = createMapModule({
+    moduleId: "jyg",
+    storageKeys: {
+      enabled: "jyg_enabled_v1",
+      stats: "jyg_stats_v3",
+      legacy: ["jyg_stats_v2"]
+    },
+    ui: {
+      prefix: "jyg"
+    },
+    telemetryTag: "JYG",
+    navigation: {
+      storageKey: "jyg_nav_state_v1",
+      normalizeLabel: (label = "", text = "") => {
+        const normalized = label || text || "";
+        return normalized.includes("\u6811\u6797") ? "\u6811\u6797" : normalized;
+      },
+      classifyAnchor: ({ text = "", normalizedLabel, direction, href }) => {
+        if (text.includes("\u653B\u51FB\u666F\u9633\u5C97")) {
+          return { group: "attack", key: `attack:${href || normalizedLabel}` };
+        }
+        if (!text.includes("\u653B\u51FB") && text.includes("\u666F\u9633\u5C97\u5927\u866B")) {
+          return { group: "attack", key: `boss:${href || normalizedLabel}` };
+        }
+        if (normalizedLabel === "\u6811\u6797") {
+          const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
+          return { group: "movement", key };
+        }
+        if (text.includes("\u7075\u829D")) {
+          return { group: "gather", key: `loot:${href || normalizedLabel}` };
+        }
+        if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
+          return { group: "misc", key: `return:${href || normalizedLabel}` };
         }
         return null;
-      },
-      () => selectNavigationMove(context)
-    ];
-    for (const attempt of attempts) {
-      const result = attempt();
-      if (result) return result;
-    }
-    return null;
-  }
-  function start() {
-    stop();
-    scanTimer = setInterval(() => {
-      if (!enabled2) return;
-      const text = document.body ? document.body.innerText : "";
-      if (text) recordLoot(text);
-      if (now() - lastClickAt < CLICK_COOLDOWN_MS) return;
-      const anchors = $$("a");
-      if (!anchors.length) return;
-      const context = buildNavigationContext(anchors);
-      handleLocationContext(context);
-      const result = pickTarget(context);
-      recordScan();
-      if (result) {
-        result.el.click();
-        recordClick(result.label);
-        updateUI2();
-      } else {
-        updateUI2();
       }
-    }, SCAN_MS);
-  }
-  function stop() {
-    if (scanTimer) clearInterval(scanTimer);
-    scanTimer = null;
-  }
-  function enable2() {
-    enabled2 = true;
-    saveBoolean(LS_ENABLED2, true);
-    start();
-    updateUI2();
-    announceState2();
-  }
-  function disable2() {
-    enabled2 = false;
-    saveBoolean(LS_ENABLED2, false);
-    stop();
-    saveStats2();
-    updateUI2();
-    announceState2();
-    navigator.resetRuntime();
-    lastTelemetryDigest = null;
-  }
-  function toggleEnabled2() {
-    if (enabled2) {
-      disable2();
-    } else {
-      enable2();
-    }
-  }
-  function init2() {
-    loadStats2();
-    mountUI2();
-    announceState2();
-    if (enabled2) {
-      start();
-    }
-  }
-  function pause2() {
-    stop();
-    saveStats2();
-  }
-  function resume2() {
-    if (enabled2) {
-      start();
-    }
-  }
+    },
+    locationHintKeywords: ["\u666F\u9633\u5C97", "\u6811\u6797"],
+    buildTargetingRules: (helpers) => [
+      helpers.byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B"),
+      helpers.byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B"),
+      helpers.byExact("\u666F\u9633\u5C97\u5927\u866B"),
+      helpers.byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B"),
+      helpers.byContextFirst("gather"),
+      helpers.byIncludes("\u7075\u829D", { label: "\u7075\u829D" }),
+      helpers.byContextFind("misc", (item) => item.label && item.label.includes("\u8FD4\u56DE")),
+      helpers.byExact("\u8FD4\u56DE\u6E38\u620F"),
+      helpers.navigationFallback()
+    ]
+  });
+  var init2 = module.init;
+  var pause2 = module.pause;
+  var resume2 = module.resume;
+
+  // src/userscripts/control-panel/src/modules/baicai.js
+  var baicai_exports = {};
+  __export(baicai_exports, {
+    init: () => init3,
+    pause: () => pause3,
+    resume: () => resume3
+  });
+  var module2 = createMapModule({
+    moduleId: "bc",
+    storageKeys: {
+      enabled: "bc_enabled_v1",
+      stats: "bc_stats_v1"
+    },
+    ui: {
+      prefix: "bc"
+    },
+    telemetryTag: "BAICAI",
+    navigation: {
+      storageKey: "bc_nav_state_v1",
+      normalizeLabel: (label = "", text = "") => {
+        const normalized = label || text || "";
+        return normalized.includes("\u83DC\u7566") ? "\u83DC\u7566" : normalized;
+      },
+      classifyAnchor: ({ text = "", normalizedLabel, direction, href }) => {
+        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
+          return { group: "attack", key: `boss:${href || normalizedLabel}` };
+        }
+        if (!text.includes("\u653B\u51FB") && text.includes("\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
+          return { group: "attack", key: `boss:${href || normalizedLabel}` };
+        }
+        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C")) {
+          return { group: "attack", key: `attack:${href || normalizedLabel}` };
+        }
+        if (!text.includes("\u653B\u51FB") && text.includes("\u5077\u83DC\u76D7\u8D3C")) {
+          return { group: "attack", key: `attack:${href || normalizedLabel}` };
+        }
+        if (normalizedLabel === "\u83DC\u7566") {
+          const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
+          return { group: "movement", key };
+        }
+        if (text.includes("\u767D\u83DC")) {
+          return { group: "gather", key: `loot:${href || normalizedLabel}` };
+        }
+        if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
+          return { group: "misc", key: `return:${href || normalizedLabel}` };
+        }
+        return null;
+      }
+    },
+    locationHintKeywords: ["\u83DC\u7566"],
+    buildTargetingRules: (helpers) => [
+      helpers.byExact("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C\u9996\u9886"),
+      helpers.byExact("\u5077\u83DC\u76D7\u8D3C\u9996\u9886"),
+      helpers.byExact("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C"),
+      helpers.byExact("\u5077\u83DC\u76D7\u8D3C"),
+      helpers.byContextFirst("gather"),
+      helpers.byIncludes("\u767D\u83DC", { label: "\u767D\u83DC" }),
+      helpers.byContextFind("misc", (item) => item.label && item.label.includes("\u8FD4\u56DE")),
+      helpers.byExact("\u8FD4\u56DE\u6E38\u620F"),
+      helpers.navigationFallback()
+    ]
+  });
+  var init3 = module2.init;
+  var pause3 = module2.pause;
+  var resume3 = module2.resume;
 
   // src/userscripts/control-panel/src/watchdog.js
   var WATCH_INTERVAL_MS = 300;
@@ -1747,16 +1901,17 @@ tr:last-child td{border-bottom:none}
   }
 
   // src/userscripts/control-panel/src/index.js
-  function init3() {
+  function init4() {
     injectStyle();
     ensurePanel();
     init();
     init2();
-    startWatchdog([rm_exports, jyg_exports]);
+    init3();
+    startWatchdog([rm_exports, jyg_exports, baicai_exports]);
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init3);
+    document.addEventListener("DOMContentLoaded", init4);
   } else {
-    init3();
+    init4();
   }
 })();
