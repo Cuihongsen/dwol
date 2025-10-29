@@ -57,15 +57,27 @@
   var PANEL_STYLE_ID = "um-style";
   var PANEL_ID = "um-panel";
   var LS_ACTIVE_MODULE = "um_active_module_v1";
-  var MODULES = [
-    { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
-    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" },
-    { id: "bc", title: "\u5237\u767D\u83DC", enabledKey: "bc_enabled_v1" }
-  ];
+  var DEFAULT_MODULES = [{ id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" }];
+  var panelModules = [...DEFAULT_MODULES];
   var navButtons = [];
   var sections = [];
   var currentActiveModule = null;
   var listenersBound = false;
+  function setPanelModules(modules = DEFAULT_MODULES) {
+    if (!Array.isArray(modules) || !modules.length) {
+      panelModules = [...DEFAULT_MODULES];
+      return;
+    }
+    const normalized = modules.map((mod) => {
+      if (!mod || typeof mod !== "object") return null;
+      const id = typeof mod.id === "string" ? mod.id.trim() : "";
+      const title = typeof mod.title === "string" ? mod.title.trim() : "";
+      const enabledKey = typeof mod.enabledKey === "string" ? mod.enabledKey.trim() : "";
+      if (!id || !title || !enabledKey) return null;
+      return { id, title, enabledKey };
+    }).filter(Boolean);
+    panelModules = normalized.length ? normalized : [...DEFAULT_MODULES];
+  }
   var PANEL_STYLE = `
 :root{color-scheme:light}
 body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%);color:#1f2937;font:13px/1.7 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;-webkit-font-smoothing:antialiased}
@@ -148,7 +160,7 @@ tr:last-child td{border-bottom:none}
     return sec;
   }
   function pickEnabledModule(excludeId = null) {
-    for (const mod of MODULES) {
+    for (const mod of panelModules) {
       if (excludeId && mod.id === excludeId) continue;
       if (localStorage.getItem(mod.enabledKey) === "1") {
         return mod.id;
@@ -159,16 +171,16 @@ tr:last-child td{border-bottom:none}
   function chooseInitialModule() {
     var _a, _b;
     const stored = localStorage.getItem(LS_ACTIVE_MODULE);
-    if (stored && MODULES.some((mod) => mod.id === stored)) {
+    if (stored && panelModules.some((mod) => mod.id === stored)) {
       return stored;
     }
     const enabled2 = pickEnabledModule();
     if (enabled2) return enabled2;
-    return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
+    return (_b = (_a = panelModules[0]) == null ? void 0 : _a.id) != null ? _b : null;
   }
   function activate(moduleId, { persist = true } = {}) {
     if (!moduleId) return;
-    if (!MODULES.some((mod) => mod.id === moduleId)) return;
+    if (!panelModules.some((mod) => mod.id === moduleId)) return;
     currentActiveModule = moduleId;
     for (const btn of navButtons) {
       const active = btn.dataset.module === moduleId;
@@ -200,7 +212,7 @@ tr:last-child td{border-bottom:none}
       if (detail.enabled) {
         focusModule(detail.moduleId);
       } else if (currentActiveModule === detail.moduleId) {
-        const next = pickEnabledModule(detail.moduleId) || ((_a = MODULES[0]) == null ? void 0 : _a.id);
+        const next = pickEnabledModule(detail.moduleId) || ((_a = panelModules[0]) == null ? void 0 : _a.id);
         focusModule(next, { persist: true });
       }
     });
@@ -230,7 +242,7 @@ tr:last-child td{border-bottom:none}
     modulesWrap.className = "modules";
     navButtons = [];
     sections = [];
-    for (const [index, mod] of MODULES.entries()) {
+    for (const [index, mod] of panelModules.entries()) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.module = mod.id;
@@ -511,14 +523,6 @@ tr:last-child td{border-bottom:none}
       startChecking();
     }
   }
-
-  // src/userscripts/control-panel/src/modules/jyg.js
-  var jyg_exports = {};
-  __export(jyg_exports, {
-    init: () => init2,
-    pause: () => pause2,
-    resume: () => resume2
-  });
 
   // src/userscripts/control-panel/src/modules/explore/navigation.js
   var PENDING_MOVE_TTL_MS = 2 * 60 * 1e3;
@@ -1732,7 +1736,7 @@ tr:last-child td{border-bottom:none}
         enable2();
       }
     }
-    function init5() {
+    function init3() {
       loadStats2();
       mountUI2();
       announceState2();
@@ -1740,19 +1744,19 @@ tr:last-child td{border-bottom:none}
         start();
       }
     }
-    function pause4() {
+    function pause2() {
       stop();
       saveStats2();
     }
-    function resume4() {
+    function resume2() {
       if (enabled2) {
         start();
       }
     }
     return {
-      init: init5,
-      pause: pause4,
-      resume: resume4
+      init: init3,
+      pause: pause2,
+      resume: resume2
     };
   }
 
@@ -1892,9 +1896,10 @@ tr:last-child td{border-bottom:none}
   }
 
   // src/userscripts/control-panel/src/modules/explore/moduleConfigs.js
-  var exploreModuleConfigs = {
-    jyg: {
+  var exploreModuleConfigs = [
+    {
       moduleId: "jyg",
+      title: "\u666F\u9633\u5C97",
       map: {
         keywords: ["\u666F\u9633\u5C97", "\u6811\u6797"],
         label: "\u6811\u6797"
@@ -1902,38 +1907,80 @@ tr:last-child td{border-bottom:none}
       monsters: ["\u666F\u9633\u5C97\u5C0F\u5927\u866B", "\u666F\u9633\u5C97\u5927\u866B"],
       medicines: ["\u7075\u829D"],
       storage: {
+        enabledKey: "jyg_enabled_v1",
         statsKey: "jyg_stats_v3",
         legacyKeys: ["jyg_stats_v2"]
       }
     },
-    bc: {
+    {
       moduleId: "bc",
+      title: "\u5237\u767D\u83DC",
       map: {
         keywords: ["\u83DC\u7566"],
         label: "\u83DC\u7566"
       },
       monsters: ["\u5077\u83DC\u76D7\u8D3C\u9996\u9886", "\u5077\u83DC\u76D7\u8D3C"],
-      medicines: ["\u7075\u829D", "\u767D\u83DC"]
+      medicines: ["\u7075\u829D", "\u767D\u83DC"],
+      storage: {
+        enabledKey: "bc_enabled_v1",
+        statsKey: "bc_stats_v1"
+      }
     }
-  };
+  ];
+  var exploreModuleConfigMap = exploreModuleConfigs.reduce((acc, config) => {
+    if (config && config.moduleId) {
+      acc[config.moduleId] = config;
+    }
+    return acc;
+  }, {});
 
-  // src/userscripts/control-panel/src/modules/jyg.js
-  var module = createConfiguredExploreModule(exploreModuleConfigs.jyg);
-  var init2 = module.init;
-  var pause2 = module.pause;
-  var resume2 = module.resume;
-
-  // src/userscripts/control-panel/src/modules/baicai.js
-  var baicai_exports = {};
-  __export(baicai_exports, {
-    init: () => init3,
-    pause: () => pause3,
-    resume: () => resume3
-  });
-  var module2 = createConfiguredExploreModule(exploreModuleConfigs.bc);
-  var init3 = module2.init;
-  var pause3 = module2.pause;
-  var resume3 = module2.resume;
+  // src/userscripts/control-panel/src/modules/explore/index.js
+  function deriveTitle(config = {}) {
+    if (config.title && typeof config.title === "string") {
+      const trimmed = config.title.trim();
+      if (trimmed.length) return trimmed;
+    }
+    const mapLabel = config.map && typeof config.map === "object" ? config.map.label : null;
+    if (typeof mapLabel === "string" && mapLabel.trim().length) {
+      return mapLabel.trim();
+    }
+    return config.moduleId || "";
+  }
+  function deriveEnabledKey(config = {}) {
+    const storage = config.storage && typeof config.storage === "object" ? config.storage : null;
+    if (storage && typeof storage.enabledKey === "string") {
+      const trimmed = storage.enabledKey.trim();
+      if (trimmed.length) {
+        return trimmed;
+      }
+    }
+    const moduleId = config.moduleId || "";
+    return moduleId ? `${moduleId}_enabled_v1` : "";
+  }
+  function buildConfiguredExploreModules(configs = exploreModuleConfigs) {
+    if (!Array.isArray(configs)) {
+      return [];
+    }
+    return configs.map((config) => {
+      if (!config || typeof config !== "object" || !config.moduleId) {
+        return null;
+      }
+      const module = createConfiguredExploreModule(config);
+      const title = deriveTitle(config);
+      const enabledKey = deriveEnabledKey(config);
+      if (!title || !enabledKey) {
+        return null;
+      }
+      return {
+        moduleId: config.moduleId,
+        title,
+        enabledKey,
+        module,
+        config
+      };
+    }).filter(Boolean);
+  }
+  var configuredExploreModules = buildConfiguredExploreModules();
 
   // src/userscripts/control-panel/src/watchdog.js
   var WATCH_INTERVAL_MS = 300;
@@ -1959,17 +2006,27 @@ tr:last-child td{border-bottom:none}
   }
 
   // src/userscripts/control-panel/src/index.js
-  function init4() {
+  function init2() {
     injectStyle();
+    const exploreEntries = configuredExploreModules;
+    const modules = [rm_exports, ...exploreEntries.map((entry) => entry.module)];
+    setPanelModules([
+      { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
+      ...exploreEntries.map((entry) => ({
+        id: entry.moduleId,
+        title: entry.title,
+        enabledKey: entry.enabledKey
+      }))
+    ]);
     ensurePanel();
-    init();
-    init2();
-    init3();
-    startWatchdog([rm_exports, jyg_exports, baicai_exports]);
+    for (const mod of modules) {
+      mod.init();
+    }
+    startWatchdog(modules);
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init4);
+    document.addEventListener("DOMContentLoaded", init2);
   } else {
-    init4();
+    init2();
   }
 })();

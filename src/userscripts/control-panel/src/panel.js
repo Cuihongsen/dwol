@@ -5,16 +5,32 @@ const PANEL_STYLE_ID = 'um-style';
 const PANEL_ID = 'um-panel';
 const LS_ACTIVE_MODULE = 'um_active_module_v1';
 
-const MODULES = [
-  { id: 'rm', title: '刷新马', enabledKey: 'rm_enabled_v1' },
-  { id: 'jyg', title: '景阳岗', enabledKey: 'jyg_enabled_v1' },
-  { id: 'bc', title: '刷白菜', enabledKey: 'bc_enabled_v1' },
-];
+const DEFAULT_MODULES = [{ id: 'rm', title: '刷新马', enabledKey: 'rm_enabled_v1' }];
+
+let panelModules = [...DEFAULT_MODULES];
 
 let navButtons = [];
 let sections = [];
 let currentActiveModule = null;
 let listenersBound = false;
+
+export function setPanelModules(modules = DEFAULT_MODULES) {
+  if (!Array.isArray(modules) || !modules.length) {
+    panelModules = [...DEFAULT_MODULES];
+    return;
+  }
+  const normalized = modules
+    .map((mod) => {
+      if (!mod || typeof mod !== 'object') return null;
+      const id = typeof mod.id === 'string' ? mod.id.trim() : '';
+      const title = typeof mod.title === 'string' ? mod.title.trim() : '';
+      const enabledKey = typeof mod.enabledKey === 'string' ? mod.enabledKey.trim() : '';
+      if (!id || !title || !enabledKey) return null;
+      return { id, title, enabledKey };
+    })
+    .filter(Boolean);
+  panelModules = normalized.length ? normalized : [...DEFAULT_MODULES];
+}
 
 const PANEL_STYLE = `
 :root{color-scheme:light}
@@ -110,7 +126,7 @@ function buildSection(title, idPrefix) {
 }
 
 function pickEnabledModule(excludeId = null) {
-  for (const mod of MODULES) {
+  for (const mod of panelModules) {
     if (excludeId && mod.id === excludeId) continue;
     if (localStorage.getItem(mod.enabledKey) === '1') {
       return mod.id;
@@ -121,17 +137,17 @@ function pickEnabledModule(excludeId = null) {
 
 function chooseInitialModule() {
   const stored = localStorage.getItem(LS_ACTIVE_MODULE);
-  if (stored && MODULES.some((mod) => mod.id === stored)) {
+  if (stored && panelModules.some((mod) => mod.id === stored)) {
     return stored;
   }
   const enabled = pickEnabledModule();
   if (enabled) return enabled;
-  return MODULES[0]?.id ?? null;
+  return panelModules[0]?.id ?? null;
 }
 
 function activate(moduleId, { persist = true } = {}) {
   if (!moduleId) return;
-  if (!MODULES.some((mod) => mod.id === moduleId)) return;
+  if (!panelModules.some((mod) => mod.id === moduleId)) return;
   currentActiveModule = moduleId;
   for (const btn of navButtons) {
     const active = btn.dataset.module === moduleId;
@@ -164,7 +180,7 @@ function bindModuleStateListener() {
     if (detail.enabled) {
       focusModule(detail.moduleId);
     } else if (currentActiveModule === detail.moduleId) {
-      const next = pickEnabledModule(detail.moduleId) || MODULES[0]?.id;
+      const next = pickEnabledModule(detail.moduleId) || panelModules[0]?.id;
       focusModule(next, { persist: true });
     }
   });
@@ -201,7 +217,7 @@ export function ensurePanel() {
   navButtons = [];
   sections = [];
 
-  for (const [index, mod] of MODULES.entries()) {
+  for (const [index, mod] of panelModules.entries()) {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.module = mod.id;
