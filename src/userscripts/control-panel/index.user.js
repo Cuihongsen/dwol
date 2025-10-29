@@ -671,23 +671,21 @@ tr:last-child td{border-bottom:none}
     if (!raw) {
       return { direction: null, label: "" };
     }
+    const withoutArrow = raw.replace(/([←→↑↓])\s*$/, "").trim();
+    const arrowMatch = raw.match(/([←→↑↓])\s*$/);
+    const arrow = arrowMatch && arrowMatch[1] ? arrowMatch[1] : null;
     let direction = null;
-    let label = raw;
-    const prefixMatch = raw.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
+    let label = withoutArrow;
+    const prefixMatch = withoutArrow.match(/^(左|右|上|下)\s*[:：]\s*(.+)$/);
     if (prefixMatch) {
       direction = prefixMatch[1];
-      label = prefixMatch[2] ? prefixMatch[2].trim() : label;
+      label = prefixMatch[2] ? prefixMatch[2].trim() : "";
     }
-    const arrowMatch = raw.match(/(.+?)([←→↑↓])\s*$/);
-    if (arrowMatch) {
-      label = arrowMatch[1] ? arrowMatch[1].trim() : label;
-      const arrow = arrowMatch[2];
-      if (arrow && ARROW_DIRECTIONS[arrow]) {
-        direction = direction || ARROW_DIRECTIONS[arrow];
-      }
+    if (!direction && arrow && ARROW_DIRECTIONS[arrow]) {
+      direction = ARROW_DIRECTIONS[arrow];
     }
     if (!label) {
-      label = raw;
+      label = withoutArrow || raw;
     }
     return { direction, label };
   }
@@ -1215,59 +1213,18 @@ tr:last-child td{border-bottom:none}
       const normalizedMovement = canonicalizeMovement(movement);
       const node = state.nodes.get(locationKey);
       if (!node) return null;
-      plannedRoute = plannedRoute.filter((step) => state.nodes.has(step.from) && state.nodes.has(step.to));
-      if (!plannedRoute.length || plannedRoute[0].from !== locationKey) {
-        plannedRoute = findRouteToUntried(locationKey);
-      }
-      if (plannedRoute.length) {
-        const step = plannedRoute.shift();
-        const link = normalizedMovement.find(
-          (item) => item.direction === step.direction && node.neighbors.get(step.direction) === step.to
-        );
-        if (link) {
-          const returnDirection2 = step.direction ? DIRECTION_OPPOSITES[step.direction] || null : null;
-          pendingMove = {
-            fromKey: locationKey,
-            direction: step.direction || null,
-            key: link.key,
-            label: link.label,
-            href: link.href || "",
-            returnDirection: returnDirection2,
-            createdAt: now()
-          };
-          lastNavigationAction = {
-            fromKey: locationKey,
-            direction: step.direction || null,
-            label: link.direction ? `${link.label}(${link.direction})` : link.label
-          };
-          const moveLabel2 = link.direction ? `${link.label}(${link.direction})` : link.label;
-          persist();
-          return { el: link.el, label: moveLabel2, direction: link.direction || null };
-        }
-        plannedRoute = [];
-      }
-      const sorted = [...normalizedMovement].sort(
-        (a, b) => directionPriority(a.direction) - directionPriority(b.direction)
-      );
-      const untried = sorted.filter((link) => !node.tried.has(link.key));
-      let chosen = untried.length ? untried[0] : null;
-      if (!chosen) {
-        for (const link of sorted) {
-          const neighborKey = link.direction ? node.neighbors.get(link.direction) : null;
-          if (neighborKey) {
-            const neighbor = state.nodes.get(neighborKey);
-            if (neighbor && hasUntriedDirections(neighbor)) {
-              chosen = link;
-              break;
-            }
-          }
-        }
-      }
-      if (!chosen && sorted.length) {
-        chosen = sorted[0];
-      }
-      if (!chosen) return null;
       plannedRoute = [];
+      const forestMoves = normalizedMovement.filter((link) => link.label === "\u6811\u6797");
+      const forestUntried = forestMoves.filter((link) => !node.tried.has(link.key));
+      let candidates = forestUntried.length ? forestUntried : forestMoves;
+      if (!candidates.length) {
+        const untried = normalizedMovement.filter((link) => !node.tried.has(link.key));
+        candidates = untried.length ? untried : normalizedMovement;
+      }
+      if (!candidates.length) {
+        return null;
+      }
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
       const returnDirection = chosen.direction ? DIRECTION_OPPOSITES[chosen.direction] || null : null;
       pendingMove = {
         fromKey: locationKey,
@@ -1376,7 +1333,7 @@ tr:last-child td{border-bottom:none}
       const rawHref = el.getAttribute("href") || "";
       const href = canonicalizeHref(rawHref);
       const { direction, label } = parseDirectionalLabel(text);
-      const normalizedLabel = label || text;
+      const normalizedLabel = label && label.includes("\u6811\u6797") ? "\u6811\u6797" : label || text;
       const base = { el, text, direction, label: normalizedLabel, href };
       if (text.includes("\u653B\u51FB\u666F\u9633\u5C97")) {
         attack.push(__spreadProps(__spreadValues({}, base), { key: `attack:${href || normalizedLabel}` }));
@@ -1386,7 +1343,7 @@ tr:last-child td{border-bottom:none}
         attack.push(__spreadProps(__spreadValues({}, base), { key: `boss:${href || normalizedLabel}` }));
         continue;
       }
-      if (normalizedLabel.includes("\u6811\u6797")) {
+      if (normalizedLabel === "\u6811\u6797") {
         const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
         movement.push(__spreadProps(__spreadValues({}, base), { key }));
         continue;
