@@ -1756,57 +1756,169 @@ tr:last-child td{border-bottom:none}
     };
   }
 
-  // src/userscripts/control-panel/src/modules/jyg.js
-  var module = createMapModule({
-    moduleId: "jyg",
-    storageKeys: {
-      enabled: "jyg_enabled_v1",
-      stats: "jyg_stats_v3",
-      legacy: ["jyg_stats_v2"]
-    },
-    ui: {
-      prefix: "jyg"
-    },
-    telemetryTag: "JYG",
-    navigation: {
-      storageKey: "jyg_nav_state_v1",
-      normalizeLabel: (label = "", text = "") => {
-        const normalized = label || text || "";
-        return normalized.includes("\u6811\u6797") ? "\u6811\u6797" : normalized;
+  // src/userscripts/control-panel/src/modules/explore/configuredModuleFactory.js
+  function ensureNonEmptyArray(values, label) {
+    if (!Array.isArray(values) || !values.length) {
+      throw new Error(`createConfiguredExploreModule requires ${label}`);
+    }
+    return values.filter((value) => typeof value === "string" && value.trim().length);
+  }
+  function buildNormalizedLabel(mapKeywords, fallbackLabel) {
+    return (label = "", text = "") => {
+      const candidates = [label, text];
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        if (mapKeywords.some((keyword) => candidate.includes(keyword))) {
+          return fallbackLabel;
+        }
+      }
+      return label || text || "";
+    };
+  }
+  function includesAny(text = "", keywords = []) {
+    return keywords.some((keyword) => text.includes(keyword));
+  }
+  function classifyAnchorFactory({
+    mapLabel,
+    mapKeywords,
+    monsters,
+    gatherKeywords
+  }) {
+    return ({ text = "", normalizedLabel, direction, href }) => {
+      const normalized = normalizedLabel || text || "";
+      if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
+        return { group: "misc", key: `return:${href || normalized}`, label: "\u8FD4\u56DE\u6E38\u620F" };
+      }
+      if (normalized === mapLabel || includesAny(normalized, mapKeywords) || includesAny(text, mapKeywords)) {
+        const key = direction ? `dir:${direction}` : `move:${href || normalized}`;
+        return { group: "movement", key, label: mapLabel };
+      }
+      for (const monster of monsters) {
+        if (!monster) continue;
+        if (includesAny(text, [monster])) {
+          const attackLabel = text.includes("\u653B\u51FB") ? `\u653B\u51FB${monster}` : monster;
+          const key = `attack:${monster}:${href || normalized}`;
+          return { group: "attack", key, label: attackLabel };
+        }
+      }
+      for (const keyword of gatherKeywords) {
+        if (!keyword) continue;
+        if (includesAny(text, [keyword])) {
+          const key = `gather:${keyword}:${href || normalized}`;
+          return { group: "gather", key, label: keyword };
+        }
+      }
+      return null;
+    };
+  }
+  function buildTargetingRulesFactory({ monsters, gatherKeywords }) {
+    return (helpers) => {
+      const attackRules = [];
+      for (const monster of monsters) {
+        if (!monster) continue;
+        attackRules.push(
+          helpers.byContextFind("attack", (item) => item.label === `\u653B\u51FB${monster}`, {
+            label: `\u653B\u51FB${monster}`
+          })
+        );
+        attackRules.push(
+          helpers.byContextFind("attack", (item) => item.label === monster, {
+            label: monster
+          })
+        );
+      }
+      const gatherRules = [helpers.byContextFirst("gather")];
+      for (const keyword of gatherKeywords) {
+        gatherRules.push(
+          helpers.byContextFind("gather", (item) => item.label && item.label.includes(keyword), {
+            label: keyword
+          })
+        );
+      }
+      return [
+        ...attackRules,
+        ...gatherRules,
+        helpers.byContextFind("misc", (item) => item.label && item.label.includes("\u8FD4\u56DE"), {
+          label: "\u8FD4\u56DE\u6E38\u620F"
+        }),
+        helpers.byExact("\u8FD4\u56DE\u6E38\u620F"),
+        helpers.navigationFallback()
+      ];
+    };
+  }
+  function createConfiguredExploreModule(config = {}) {
+    const { moduleId, map, monsters = [], medicines = [], storage = {}, telemetryTag, ui = {} } = config;
+    if (!moduleId) {
+      throw new Error("createConfiguredExploreModule requires moduleId");
+    }
+    if (!map || typeof map !== "object") {
+      throw new Error("createConfiguredExploreModule requires map configuration");
+    }
+    const mapKeywords = ensureNonEmptyArray(map.keywords, "map.keywords");
+    const mapLabel = typeof map.label === "string" && map.label.trim().length ? map.label.trim() : mapKeywords[0];
+    const monsterList = monsters.filter((monster) => typeof monster === "string" && monster.trim().length);
+    const gatherKeywords = medicines.filter((keyword) => typeof keyword === "string" && keyword.trim().length);
+    if (!monsterList.length) {
+      throw new Error("createConfiguredExploreModule requires at least one monster");
+    }
+    const storageKeys = {
+      enabled: storage.enabledKey || `${moduleId}_enabled_v1`,
+      stats: storage.statsKey || `${moduleId}_stats_v1`
+    };
+    if (Array.isArray(storage.legacyKeys) && storage.legacyKeys.length) {
+      storageKeys.legacy = storage.legacyKeys;
+    }
+    return createMapModule({
+      moduleId,
+      storageKeys,
+      ui: { prefix: ui.prefix || moduleId },
+      telemetryTag: telemetryTag || moduleId.toUpperCase(),
+      navigation: {
+        storageKey: storage.navigationKey || `${moduleId}_nav_state_v1`,
+        normalizeLabel: buildNormalizedLabel(mapKeywords, mapLabel),
+        classifyAnchor: classifyAnchorFactory({
+          mapLabel,
+          mapKeywords,
+          monsters: monsterList,
+          gatherKeywords
+        })
       },
-      classifyAnchor: ({ text = "", normalizedLabel, direction, href }) => {
-        if (text.includes("\u653B\u51FB\u666F\u9633\u5C97")) {
-          return { group: "attack", key: `attack:${href || normalizedLabel}` };
-        }
-        if (!text.includes("\u653B\u51FB") && text.includes("\u666F\u9633\u5C97\u5927\u866B")) {
-          return { group: "attack", key: `boss:${href || normalizedLabel}` };
-        }
-        if (normalizedLabel === "\u6811\u6797") {
-          const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
-          return { group: "movement", key };
-        }
-        if (text.includes("\u7075\u829D")) {
-          return { group: "gather", key: `loot:${href || normalizedLabel}` };
-        }
-        if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
-          return { group: "misc", key: `return:${href || normalizedLabel}` };
-        }
-        return null;
+      locationHintKeywords: mapKeywords,
+      buildTargetingRules: buildTargetingRulesFactory({
+        monsters: monsterList,
+        gatherKeywords
+      })
+    });
+  }
+
+  // src/userscripts/control-panel/src/modules/explore/moduleConfigs.js
+  var exploreModuleConfigs = {
+    jyg: {
+      moduleId: "jyg",
+      map: {
+        keywords: ["\u666F\u9633\u5C97", "\u6811\u6797"],
+        label: "\u6811\u6797"
+      },
+      monsters: ["\u666F\u9633\u5C97\u5C0F\u5927\u866B", "\u666F\u9633\u5C97\u5927\u866B"],
+      medicines: ["\u7075\u829D"],
+      storage: {
+        statsKey: "jyg_stats_v3",
+        legacyKeys: ["jyg_stats_v2"]
       }
     },
-    locationHintKeywords: ["\u666F\u9633\u5C97", "\u6811\u6797"],
-    buildTargetingRules: (helpers) => [
-      helpers.byExact("\u653B\u51FB\u666F\u9633\u5C97\u5C0F\u5927\u866B"),
-      helpers.byExact("\u653B\u51FB\u666F\u9633\u5C97\u5927\u866B"),
-      helpers.byExact("\u666F\u9633\u5C97\u5927\u866B"),
-      helpers.byExact("\u666F\u9633\u5C97\u5C0F\u5927\u866B"),
-      helpers.byContextFirst("gather"),
-      helpers.byIncludes("\u7075\u829D", { label: "\u7075\u829D" }),
-      helpers.byContextFind("misc", (item) => item.label && item.label.includes("\u8FD4\u56DE")),
-      helpers.byExact("\u8FD4\u56DE\u6E38\u620F"),
-      helpers.navigationFallback()
-    ]
-  });
+    bc: {
+      moduleId: "bc",
+      map: {
+        keywords: ["\u83DC\u7566"],
+        label: "\u83DC\u7566"
+      },
+      monsters: ["\u5077\u83DC\u76D7\u8D3C\u9996\u9886", "\u5077\u83DC\u76D7\u8D3C"],
+      medicines: ["\u7075\u829D", "\u767D\u83DC"]
+    }
+  };
+
+  // src/userscripts/control-panel/src/modules/jyg.js
+  var module = createConfiguredExploreModule(exploreModuleConfigs.jyg);
   var init2 = module.init;
   var pause2 = module.pause;
   var resume2 = module.resume;
@@ -1818,59 +1930,7 @@ tr:last-child td{border-bottom:none}
     pause: () => pause3,
     resume: () => resume3
   });
-  var module2 = createMapModule({
-    moduleId: "bc",
-    storageKeys: {
-      enabled: "bc_enabled_v1",
-      stats: "bc_stats_v1"
-    },
-    ui: {
-      prefix: "bc"
-    },
-    telemetryTag: "BAICAI",
-    navigation: {
-      storageKey: "bc_nav_state_v1",
-      normalizeLabel: (label = "", text = "") => {
-        const normalized = label || text || "";
-        return normalized.includes("\u83DC\u7566") ? "\u83DC\u7566" : normalized;
-      },
-      classifyAnchor: ({ text = "", normalizedLabel, direction, href }) => {
-        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
-          return { group: "attack", key: `boss:${href || normalizedLabel}` };
-        }
-        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C")) {
-          return { group: "attack", key: `attack:${href || normalizedLabel}` };
-        }
-        if (!text.includes("\u653B\u51FB") && text.includes("\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
-          return { group: "attack", key: `boss:${href || normalizedLabel}` };
-        }
-        if (normalizedLabel === "\u83DC\u7566") {
-          const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
-          return { group: "movement", key };
-        }
-        if (text.includes("\u7075\u829D") || text.includes("\u767D\u83DC")) {
-          return { group: "gather", key: `loot:${href || normalizedLabel}` };
-        }
-        if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
-          return { group: "misc", key: `return:${href || normalizedLabel}` };
-        }
-        return null;
-      }
-    },
-    locationHintKeywords: ["\u83DC\u7566"],
-    buildTargetingRules: (helpers) => [
-      helpers.byExact("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C"),
-      helpers.byExact("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C\u9996\u9886"),
-      helpers.byExact("\u5077\u83DC\u76D7\u8D3C\u9996\u9886"),
-      helpers.byExact("\u5077\u83DC\u76D7\u8D3C"),
-      helpers.byContextFirst("gather"),
-      helpers.byIncludes("\u7075\u829D", { label: "\u7075\u829D" }),
-      helpers.byIncludes("\u767D\u83DC", { label: "\u767D\u83DC" }),
-      helpers.byContextFind("misc", (item) => item.label && item.label.includes("\u8FD4\u56DE")),
-      helpers.byExact("\u8FD4\u56DE\u6E38\u620F"),
-      helpers.navigationFallback()
-    ]
-  });
+  var module2 = createConfiguredExploreModule(exploreModuleConfigs.bc);
   var init3 = module2.init;
   var pause3 = module2.pause;
   var resume3 = module2.resume;
