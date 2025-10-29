@@ -1793,10 +1793,6 @@ tr:last-child td{border-bottom:none}
       if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
         return { group: "misc", key: `return:${href || normalized}`, label: "\u8FD4\u56DE\u6E38\u620F" };
       }
-      if (normalized === mapLabel || includesAny(normalized, mapKeywords) || includesAny(text, mapKeywords)) {
-        const key = direction ? `dir:${direction}` : `move:${href || normalized}`;
-        return { group: "movement", key, label: mapLabel };
-      }
       for (const monster of monsters) {
         if (!monster) continue;
         if (includesAny(text, [monster])) {
@@ -1811,6 +1807,10 @@ tr:last-child td{border-bottom:none}
           const key = `gather:${keyword}:${href || normalized}`;
           return { group: "gather", key, label: keyword };
         }
+      }
+      if (normalized === mapLabel || includesAny(normalized, mapKeywords) || includesAny(text, mapKeywords)) {
+        const key = direction ? `dir:${direction}` : `move:${href || normalized}`;
+        return { group: "movement", key, label: mapLabel };
       }
       return null;
     };

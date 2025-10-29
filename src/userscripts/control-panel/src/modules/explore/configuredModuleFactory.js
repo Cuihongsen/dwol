@@ -37,11 +37,6 @@ function classifyAnchorFactory({
       return { group: 'misc', key: `return:${href || normalized}`, label: '返回游戏' };
     }
 
-    if (normalized === mapLabel || includesAny(normalized, mapKeywords) || includesAny(text, mapKeywords)) {
-      const key = direction ? `dir:${direction}` : `move:${href || normalized}`;
-      return { group: 'movement', key, label: mapLabel };
-    }
-
     for (const monster of monsters) {
       if (!monster) continue;
       if (includesAny(text, [monster])) {
@@ -57,6 +52,11 @@ function classifyAnchorFactory({
         const key = `gather:${keyword}:${href || normalized}`;
         return { group: 'gather', key, label: keyword };
       }
+    }
+
+    if (normalized === mapLabel || includesAny(normalized, mapKeywords) || includesAny(text, mapKeywords)) {
+      const key = direction ? `dir:${direction}` : `move:${href || normalized}`;
+      return { group: 'movement', key, label: mapLabel };
     }
 
     return null;
