@@ -48,7 +48,7 @@ function classifyAnchorFactory({
 
     for (const keyword of gatherKeywords) {
       if (!keyword) continue;
-      if (includesAny(text, [keyword])) {
+      if (includesAny(text, [keyword]) || includesAny(normalized, [keyword])) {
         const key = `gather:${keyword}:${href || normalized}`;
         return { group: 'gather', key, label: keyword };
       }
@@ -84,6 +84,11 @@ function buildTargetingRulesFactory({ monsters, gatherKeywords }) {
     for (const keyword of gatherKeywords) {
       gatherRules.push(
         helpers.byContextFind('gather', (item) => item.label && item.label.includes(keyword), {
+          label: keyword,
+        })
+      );
+      gatherRules.push(
+        helpers.byIncludes(keyword, {
           label: keyword,
         })
       );
