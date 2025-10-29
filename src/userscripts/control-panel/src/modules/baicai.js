@@ -17,27 +17,21 @@ const module = createMapModule({
       return normalized.includes('菜畦') ? '菜畦' : normalized;
     },
     classifyAnchor: ({ text = '', normalizedLabel, direction, href }) => {
-      if (text.includes('攻击偷菜盗贼')) {
-        return { group: 'attack', key: `attack:${href || normalizedLabel}` };
-      }
-      if (!text.includes('攻击') && text.includes('偷菜盗贼')) {
-        return { group: 'attack', key: `attack:${href || normalizedLabel}` };
-      }
       if (text.includes('攻击偷菜盗贼首领')) {
         return { group: 'attack', key: `boss:${href || normalizedLabel}` };
+      }
+      if (text.includes('攻击偷菜盗贼')) {
+        return { group: 'attack', key: `attack:${href || normalizedLabel}` };
       }
       if (!text.includes('攻击') && text.includes('偷菜盗贼首领')) {
         return { group: 'attack', key: `boss:${href || normalizedLabel}` };
       }
-      if (text.includes('灵芝')) {
-        return { group: 'gather', key: `loot:${href || normalizedLabel}` };
-      }
-      if (text.includes('白菜')) {
-        return { group: 'gather', key: `loot:${href || normalizedLabel}` };
-      }
       if (normalizedLabel === '菜畦') {
         const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
         return { group: 'movement', key };
+      }
+      if (text.includes('灵芝') || text.includes('白菜')) {
+        return { group: 'gather', key: `loot:${href || normalizedLabel}` };
       }
       if (text.includes('返回游戏')) {
         return { group: 'misc', key: `return:${href || normalizedLabel}` };

@@ -1835,27 +1835,21 @@ tr:last-child td{border-bottom:none}
         return normalized.includes("\u83DC\u7566") ? "\u83DC\u7566" : normalized;
       },
       classifyAnchor: ({ text = "", normalizedLabel, direction, href }) => {
-        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C")) {
-          return { group: "attack", key: `attack:${href || normalizedLabel}` };
-        }
-        if (!text.includes("\u653B\u51FB") && text.includes("\u5077\u83DC\u76D7\u8D3C")) {
-          return { group: "attack", key: `attack:${href || normalizedLabel}` };
-        }
         if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
           return { group: "attack", key: `boss:${href || normalizedLabel}` };
+        }
+        if (text.includes("\u653B\u51FB\u5077\u83DC\u76D7\u8D3C")) {
+          return { group: "attack", key: `attack:${href || normalizedLabel}` };
         }
         if (!text.includes("\u653B\u51FB") && text.includes("\u5077\u83DC\u76D7\u8D3C\u9996\u9886")) {
           return { group: "attack", key: `boss:${href || normalizedLabel}` };
         }
-        if (text.includes("\u7075\u829D")) {
-          return { group: "gather", key: `loot:${href || normalizedLabel}` };
-        }
-        if (text.includes("\u767D\u83DC")) {
-          return { group: "gather", key: `loot:${href || normalizedLabel}` };
-        }
         if (normalizedLabel === "\u83DC\u7566") {
           const key = direction ? `dir:${direction}` : `move:${href || normalizedLabel}`;
           return { group: "movement", key };
+        }
+        if (text.includes("\u7075\u829D") || text.includes("\u767D\u83DC")) {
+          return { group: "gather", key: `loot:${href || normalizedLabel}` };
         }
         if (text.includes("\u8FD4\u56DE\u6E38\u620F")) {
           return { group: "misc", key: `return:${href || normalizedLabel}` };
