@@ -1,7 +1,5 @@
 import { now } from '../../dom.js';
 import { loadJSON, saveJSON } from '../../storage.js';
-
-const STORAGE_KEY = 'jyg_nav_state_v1';
 const PENDING_MOVE_TTL_MS = 2 * 60 * 1000;
 const VOLATILE_QUERY_PARAMS = new Set(['sid']);
 
@@ -383,7 +381,11 @@ function formatPlannedRoute(route, state) {
   return parts.join(' / ');
 }
 
-export function createNavigator({ storageKey = STORAGE_KEY, logger = console } = {}) {
+export function createNavigator({ storageKey, logger = console, tag = 'NAV' } = {}) {
+  if (!storageKey) {
+    throw new Error('createNavigator requires a storageKey');
+  }
+  const prefix = `[${tag}]`;
   let state = loadState(storageKey);
   let currentLocationKey = null;
   let pendingMove = state.pendingMove ? { ...state.pendingMove } : null;
@@ -433,7 +435,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     const alias = `loc#${state.nextLocationId++}`;
     if (logger && typeof logger.debug === 'function') {
       const preview = baseKey && baseKey.length > 120 ? `${baseKey.slice(0, 117)}…` : baseKey;
-      logger.debug('[JYG] 创建新位置', alias, {
+      logger.debug(`${prefix} 创建新位置`, alias, {
         baseKey: preview,
         hint,
       });
@@ -496,7 +498,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
         if (signatureMatches.length === 1) {
           registerAlias(signatureMatches[0], baseKey);
           if (logger && typeof logger.debug === 'function') {
-            logger.debug('[JYG] 通过出入口指纹校准位置', signatureMatches[0], {
+            logger.debug(`${prefix} 通过出入口指纹校准位置`, signatureMatches[0], {
               baseHash: hashKey(baseKey),
             });
           }
@@ -515,7 +517,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
         if (hintMatches.length === 1) {
           registerAlias(hintMatches[0], baseKey);
           if (logger && typeof logger.debug === 'function') {
-            logger.debug('[JYG] 通过地点提示校准位置', hintMatches[0], {
+            logger.debug(`${prefix} 通过地点提示校准位置`, hintMatches[0], {
               baseHash: hashKey(baseKey),
               hint,
             });
@@ -531,7 +533,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       if (resolved) {
         registerAlias(resolved, baseKey);
         if (logger && typeof logger.debug === 'function') {
-          logger.debug('[JYG] 通过最近访问记录推断位置', resolved, {
+          logger.debug(`${prefix} 通过最近访问记录推断位置`, resolved, {
             baseHash: hashKey(baseKey),
           });
         }
@@ -539,7 +541,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
       }
 
       if (logger && typeof logger.warn === 'function') {
-        logger.warn('[JYG] 无法根据邻接关系解析位置，创建新别名', {
+        logger.warn(`${prefix} 无法根据邻接关系解析位置，创建新别名`, {
           baseHash: hashKey(baseKey),
           fromKey,
           direction,
@@ -653,7 +655,7 @@ export function createNavigator({ storageKey = STORAGE_KEY, logger = console } =
     const normalizedMovement = canonicalizeMovement(movement);
     if (!normalizedMovement.length) {
       if (logger && typeof logger.debug === 'function') {
-        logger.debug('[JYG] 跳过无出入口的页面', {
+        logger.debug(`${prefix} 跳过无出入口的页面`, {
           hint: shortenHint(hint),
           pendingMove: pendingMove ? pendingMove.direction || pendingMove.key : null,
         });
