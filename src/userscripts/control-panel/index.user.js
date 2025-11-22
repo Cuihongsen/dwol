@@ -59,7 +59,8 @@
   var LS_ACTIVE_MODULE = "um_active_module_v1";
   var MODULES = [
     { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
-    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" }
+    { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" },
+    { id: "atk", title: "\u666E\u901A\u653B\u51FB", enabledKey: "atk_enabled_v1" }
   ];
   var navButtons = [];
   var sections = [];
@@ -161,8 +162,8 @@ tr:last-child td{border-bottom:none}
     if (stored && MODULES.some((mod) => mod.id === stored)) {
       return stored;
     }
-    const enabled3 = pickEnabledModule();
-    if (enabled3) return enabled3;
+    const enabled4 = pickEnabledModule();
+    if (enabled4) return enabled4;
     return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
   }
   function activate(moduleId, { persist = true } = {}) {
@@ -1723,6 +1724,144 @@ tr:last-child td{border-bottom:none}
     }
   }
 
+  // src/userscripts/control-panel/src/modules/atk.js
+  var atk_exports = {};
+  __export(atk_exports, {
+    init: () => init3,
+    pause: () => pause3,
+    resume: () => resume3
+  });
+  var CLICK_INTERVAL_MS = 700;
+  var TARGET_TEXT2 = "\u666E\u901A\u653B\u51FB";
+  var LS_ENABLED3 = "atk_enabled_v1";
+  var LS_STATS3 = "atk_stats_v1";
+  var MODULE_ID3 = "atk";
+  var enabled3 = loadBoolean(LS_ENABLED3);
+  var clickTimer = null;
+  var clickCount2 = 0;
+  var lastClickAt2 = 0;
+  function loadStats3() {
+    const stats = loadJSON(LS_STATS3);
+    if (!stats) return;
+    clickCount2 = Number(stats.clickCount) || 0;
+    lastClickAt2 = typeof stats.lastClickAt === "number" ? stats.lastClickAt : 0;
+  }
+  function saveStats3() {
+    saveJSON(LS_STATS3, { clickCount: clickCount2, lastClickAt: lastClickAt2 });
+  }
+  function resetStats3() {
+    clickCount2 = 0;
+    lastClickAt2 = 0;
+    saveStats3();
+    updateUI3();
+  }
+  function announceState3() {
+    emitModuleState({ moduleId: MODULE_ID3, enabled: enabled3 });
+  }
+  function findAttackButton() {
+    return $$('a,button,input[type="button"],input[type="submit"]').find((el) => {
+      const text = el.textContent ? el.textContent.trim() : "";
+      const value = el instanceof HTMLInputElement ? (el.value || "").trim() : "";
+      return text === TARGET_TEXT2 || value === TARGET_TEXT2;
+    });
+  }
+  function startClicking() {
+    stopClicking();
+    clickTimer = setInterval(() => {
+      const target = findAttackButton();
+      if (!target) return;
+      target.click();
+      clickCount2 += 1;
+      lastClickAt2 = now();
+      saveStats3();
+      updateUI3();
+    }, CLICK_INTERVAL_MS);
+  }
+  function stopClicking() {
+    if (clickTimer) clearInterval(clickTimer);
+    clickTimer = null;
+  }
+  function enable3() {
+    enabled3 = true;
+    saveBoolean(LS_ENABLED3, true);
+    startClicking();
+    updateUI3();
+    announceState3();
+  }
+  function disable3() {
+    enabled3 = false;
+    saveBoolean(LS_ENABLED3, false);
+    stopClicking();
+    updateUI3();
+    announceState3();
+  }
+  function toggleEnabled3() {
+    if (enabled3) {
+      disable3();
+    } else {
+      enable3();
+    }
+  }
+  function mountUI3() {
+    const body = $("#atk-body");
+    if (!body) return;
+    body.innerHTML = `
+    <div class="kv"><span class="label" data-label="\u72B6\u6001"></span><span
+        id="atk-status"
+        class="value state"
+        data-state="${enabled3 ? "on" : "off"}"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u7D2F\u8BA1\u70B9\u51FB"></span><span
+        id="atk-count"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u70B9\u51FB"></span><span
+        id="atk-last"
+        class="value"
+        data-value="-"
+      ></span></div>
+  `;
+    const toggle = $("#atk-toggle");
+    if (toggle) {
+      toggle.onclick = () => toggleEnabled3();
+    }
+    const reset = $("#atk-reset");
+    if (reset) {
+      reset.onclick = () => resetStats3();
+    }
+    updateUI3();
+  }
+  function updateUI3() {
+    const status = $("#atk-status");
+    if (status) {
+      status.dataset.state = enabled3 ? "on" : "off";
+    }
+    const toggle = $("#atk-toggle");
+    if (toggle) {
+      toggle.dataset.mode = enabled3 ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled3 ? "true" : "false");
+    }
+    safeText($("#atk-count"), clickCount2);
+    safeText($("#atk-last"), formatTime(lastClickAt2));
+  }
+  function init3() {
+    loadStats3();
+    mountUI3();
+    announceState3();
+    if (enabled3) {
+      startClicking();
+    }
+  }
+  function pause3() {
+    stopClicking();
+  }
+  function resume3() {
+    if (enabled3) {
+      startClicking();
+    }
+  }
+
   // src/userscripts/control-panel/src/watchdog.js
   var WATCH_INTERVAL_MS = 300;
   var CONTINUE_DELAY_MS = 1e3;
@@ -1747,16 +1886,17 @@ tr:last-child td{border-bottom:none}
   }
 
   // src/userscripts/control-panel/src/index.js
-  function init3() {
+  function init4() {
     injectStyle();
     ensurePanel();
     init();
     init2();
-    startWatchdog([rm_exports, jyg_exports]);
+    init3();
+    startWatchdog([rm_exports, jyg_exports, atk_exports]);
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init3);
+    document.addEventListener("DOMContentLoaded", init4);
   } else {
-    init3();
+    init4();
   }
 })();

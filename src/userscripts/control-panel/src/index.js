@@ -1,6 +1,7 @@
 import { ensurePanel, injectStyle } from './panel.js';
 import * as RM from './modules/rm.js';
 import * as JYG from './modules/jyg.js';
+import * as ATK from './modules/atk.js';
 import { startWatchdog } from './watchdog.js';
 
 function init() {
@@ -8,7 +9,8 @@ function init() {
   ensurePanel();
   RM.init();
   JYG.init();
-  startWatchdog([RM, JYG]);
+  ATK.init();
+  startWatchdog([RM, JYG, ATK]);
 }
 
 if (document.readyState === 'loading') {
