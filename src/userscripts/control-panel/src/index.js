@@ -1,14 +1,18 @@
 import { ensurePanel, injectStyle } from './panel.js';
 import * as RM from './modules/rm.js';
 import * as JYG from './modules/jyg.js';
+import * as ATK from './modules/atk.js';
 import { startWatchdog } from './watchdog.js';
+import { initMapHotkeys } from './map-hotkeys.js';
 
 function init() {
   injectStyle();
   ensurePanel();
   RM.init();
   JYG.init();
-  startWatchdog([RM, JYG]);
+  ATK.init();
+  initMapHotkeys();
+  startWatchdog([RM, JYG, ATK]);
 }
 
 if (document.readyState === 'loading') {
