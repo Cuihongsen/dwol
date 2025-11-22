@@ -60,7 +60,7 @@
   var MODULES = [
     { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
     { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" },
-    { id: "atk", title: "\u666E\u901A\u653B\u51FB", enabledKey: "atk_enabled_v1" }
+    { id: "atk", title: "\u81EA\u52A8\u6253\u602A", enabledKey: "atk_enabled_v1" }
   ];
   var navButtons = [];
   var sections = [];
@@ -1732,24 +1732,38 @@ tr:last-child td{border-bottom:none}
     resume: () => resume3
   });
   var CLICK_INTERVAL_MS = 700;
-  var TARGET_TEXT2 = "\u666E\u901A\u653B\u51FB";
   var RETURN_TEXT = "\u8FD4\u56DE\u6E38\u620F";
   var END_TEXT = "\u6218\u6597\u5DF2\u7ECF\u7ED3\u675F";
   var LS_ENABLED3 = "atk_enabled_v1";
   var LS_STATS3 = "atk_stats_v1";
+  var LS_ACTION = "atk_action_v1";
   var MODULE_ID3 = "atk";
+  var ATTACK_OPTIONS = [
+    { value: "normal", label: "\u666E\u901A\u653B\u51FB" },
+    { value: "elixir", label: "\u4E07\u5E74\u7075\u829D" }
+  ];
   var enabled3 = loadBoolean(LS_ENABLED3);
   var clickTimer = null;
   var clickCount2 = 0;
   var lastClickAt2 = 0;
+  var action = ATTACK_OPTIONS[0].value;
   function loadStats3() {
     const stats = loadJSON(LS_STATS3);
     if (!stats) return;
     clickCount2 = Number(stats.clickCount) || 0;
     lastClickAt2 = typeof stats.lastClickAt === "number" ? stats.lastClickAt : 0;
   }
+  function loadAction() {
+    const stored = loadJSON(LS_ACTION);
+    if (typeof stored === "string" && ATTACK_OPTIONS.some((item) => item.value === stored)) {
+      action = stored;
+    }
+  }
   function saveStats3() {
     saveJSON(LS_STATS3, { clickCount: clickCount2, lastClickAt: lastClickAt2 });
+  }
+  function saveAction() {
+    saveJSON(LS_ACTION, action);
   }
   function resetStats3() {
     clickCount2 = 0;
@@ -1761,10 +1775,12 @@ tr:last-child td{border-bottom:none}
     emitModuleState({ moduleId: MODULE_ID3, enabled: enabled3 });
   }
   function findAttackButton() {
+    var _a, _b;
+    const targetText = (_b = (_a = ATTACK_OPTIONS.find((item) => item.value === action)) == null ? void 0 : _a.label) != null ? _b : ATTACK_OPTIONS[0].label;
     return $$('a,button,input[type="button"],input[type="submit"]').find((el) => {
       const text = el.textContent ? el.textContent.trim() : "";
       const value = el instanceof HTMLInputElement ? (el.value || "").trim() : "";
-      return text === TARGET_TEXT2 || value === TARGET_TEXT2;
+      return text === targetText || value === targetText;
     });
   }
   function findReturnButton() {
@@ -1833,6 +1849,11 @@ tr:last-child td{border-bottom:none}
         class="value state"
         data-state="${enabled3 ? "on" : "off"}"
       ></span></div>
+    <div class="kv"><span class="label" data-label="\u62DB\u5F0F"></span><span
+        class="value"
+      ><select id="atk-action" aria-label="\u81EA\u52A8\u6253\u602A \u62DB\u5F0F\u9009\u62E9">
+        ${ATTACK_OPTIONS.map((item) => `<option value="${item.value}">${item.label}</option>`).join("")}
+      </select></span></div>
     <div class="kv"><span class="label" data-label="\u7D2F\u8BA1\u70B9\u51FB"></span><span
         id="atk-count"
         class="value"
@@ -1847,6 +1868,19 @@ tr:last-child td{border-bottom:none}
     const toggle = $("#atk-toggle");
     if (toggle) {
       toggle.onclick = () => toggleEnabled3();
+    }
+    const actionSelect = $("#atk-action");
+    if (actionSelect instanceof HTMLSelectElement) {
+      actionSelect.onchange = () => {
+        const next = actionSelect.value;
+        const valid = ATTACK_OPTIONS.some((item) => item.value === next);
+        if (!valid) return;
+        action = next;
+        saveAction();
+        if (enabled3) {
+          startClicking();
+        }
+      };
     }
     const reset = $("#atk-reset");
     if (reset) {
@@ -1864,11 +1898,16 @@ tr:last-child td{border-bottom:none}
       toggle.dataset.mode = enabled3 ? "on" : "off";
       toggle.setAttribute("aria-pressed", enabled3 ? "true" : "false");
     }
+    const actionSelect = $("#atk-action");
+    if (actionSelect instanceof HTMLSelectElement) {
+      actionSelect.value = action;
+    }
     safeText($("#atk-count"), clickCount2);
     safeText($("#atk-last"), formatTime(lastClickAt2));
   }
   function init3() {
     loadStats3();
+    loadAction();
     mountUI3();
     announceState3();
     if (enabled3) {

@@ -3,17 +3,23 @@ import { emitModuleState } from '../events.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 
 const CLICK_INTERVAL_MS = 700;
-const TARGET_TEXT = '普通攻击';
 const RETURN_TEXT = '返回游戏';
 const END_TEXT = '战斗已经结束';
 const LS_ENABLED = 'atk_enabled_v1';
 const LS_STATS = 'atk_stats_v1';
+const LS_ACTION = 'atk_action_v1';
 const MODULE_ID = 'atk';
+
+const ATTACK_OPTIONS = [
+  { value: 'normal', label: '普通攻击' },
+  { value: 'elixir', label: '万年灵芝' },
+];
 
 let enabled = loadBoolean(LS_ENABLED);
 let clickTimer = null;
 let clickCount = 0;
 let lastClickAt = 0;
+let action = ATTACK_OPTIONS[0].value;
 
 function loadStats() {
   const stats = loadJSON(LS_STATS);
@@ -22,8 +28,19 @@ function loadStats() {
   lastClickAt = typeof stats.lastClickAt === 'number' ? stats.lastClickAt : 0;
 }
 
+function loadAction() {
+  const stored = loadJSON(LS_ACTION);
+  if (typeof stored === 'string' && ATTACK_OPTIONS.some((item) => item.value === stored)) {
+    action = stored;
+  }
+}
+
 function saveStats() {
   saveJSON(LS_STATS, { clickCount, lastClickAt });
+}
+
+function saveAction() {
+  saveJSON(LS_ACTION, action);
 }
 
 function resetStats() {
@@ -38,10 +55,11 @@ function announceState() {
 }
 
 function findAttackButton() {
+  const targetText = ATTACK_OPTIONS.find((item) => item.value === action)?.label ?? ATTACK_OPTIONS[0].label;
   return $$('a,button,input[type="button"],input[type="submit"]').find((el) => {
     const text = el.textContent ? el.textContent.trim() : '';
     const value = el instanceof HTMLInputElement ? (el.value || '').trim() : '';
-    return text === TARGET_TEXT || value === TARGET_TEXT;
+    return text === targetText || value === targetText;
   });
 }
 
@@ -118,6 +136,11 @@ function mountUI() {
         class="value state"
         data-state="${enabled ? 'on' : 'off'}"
       ></span></div>
+    <div class="kv"><span class="label" data-label="招式"></span><span
+        class="value"
+      ><select id="atk-action" aria-label="自动打怪 招式选择">
+        ${ATTACK_OPTIONS.map((item) => `<option value="${item.value}">${item.label}</option>`).join('')}
+      </select></span></div>
     <div class="kv"><span class="label" data-label="累计点击"></span><span
         id="atk-count"
         class="value"
@@ -132,6 +155,19 @@ function mountUI() {
   const toggle = $('#atk-toggle');
   if (toggle) {
     toggle.onclick = () => toggleEnabled();
+  }
+  const actionSelect = $('#atk-action');
+  if (actionSelect instanceof HTMLSelectElement) {
+    actionSelect.onchange = () => {
+      const next = actionSelect.value;
+      const valid = ATTACK_OPTIONS.some((item) => item.value === next);
+      if (!valid) return;
+      action = next;
+      saveAction();
+      if (enabled) {
+        startClicking();
+      }
+    };
   }
   const reset = $('#atk-reset');
   if (reset) {
@@ -150,12 +186,17 @@ function updateUI() {
     toggle.dataset.mode = enabled ? 'on' : 'off';
     toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   }
+  const actionSelect = $('#atk-action');
+  if (actionSelect instanceof HTMLSelectElement) {
+    actionSelect.value = action;
+  }
   safeText($('#atk-count'), clickCount);
   safeText($('#atk-last'), formatTime(lastClickAt));
 }
 
 export function init() {
   loadStats();
+  loadAction();
   mountUI();
   announceState();
   if (enabled) {
