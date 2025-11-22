@@ -8,7 +8,7 @@ const LS_ACTIVE_MODULE = 'um_active_module_v1';
 const MODULES = [
   { id: 'rm', title: '刷新马', enabledKey: 'rm_enabled_v1' },
   { id: 'jyg', title: '景阳岗', enabledKey: 'jyg_enabled_v1' },
-  { id: 'atk', title: '普通攻击', enabledKey: 'atk_enabled_v1' },
+  { id: 'atk', title: '自动打怪', enabledKey: 'atk_enabled_v1' },
 ];
 
 let navButtons = [];
