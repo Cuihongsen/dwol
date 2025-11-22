@@ -71,7 +71,6 @@ function clickDirection(direction) {
 }
 
 function onKeydown(event) {
-  if (event.defaultPrevented) return;
   if (event.altKey || event.ctrlKey || event.metaKey) return;
   const direction = KEY_DIRECTION[event.key];
   if (!direction) return;
