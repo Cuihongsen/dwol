@@ -3,6 +3,7 @@ import * as RM from './modules/rm.js';
 import * as JYG from './modules/jyg.js';
 import * as ATK from './modules/atk.js';
 import { startWatchdog } from './watchdog.js';
+import { initMapHotkeys } from './map-hotkeys.js';
 
 function init() {
   injectStyle();
@@ -10,6 +11,7 @@ function init() {
   RM.init();
   JYG.init();
   ATK.init();
+  initMapHotkeys();
   startWatchdog([RM, JYG, ATK]);
 }
 
