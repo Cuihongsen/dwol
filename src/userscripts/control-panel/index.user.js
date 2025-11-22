@@ -1914,6 +1914,12 @@ tr:last-child td{border-bottom:none}
     ArrowLeft: "\u5DE6",
     ArrowRight: "\u53F3"
   };
+  var DIRECTION_ACCESS_KEYS = {
+    \u4E0A: /* @__PURE__ */ new Set(["2"]),
+    \u4E0B: /* @__PURE__ */ new Set(["8"]),
+    \u5DE6: /* @__PURE__ */ new Set(["4"]),
+    \u53F3: /* @__PURE__ */ new Set(["6"])
+  };
   var IGNORE_TAGS = /* @__PURE__ */ new Set(["input", "textarea", "select", "option", "button"]);
   var hotkeysBound = false;
   function isTextInput(target) {
@@ -1933,6 +1939,15 @@ tr:last-child td{border-bottom:none}
     const parsed = parseDirectionalLabel(text);
     return parsed.direction === direction;
   }
+  function matchAccessKey(el, direction) {
+    if (!el || !el.getAttribute) return false;
+    const accessKey = el.getAttribute("accesskey");
+    if (!accessKey) return false;
+    const normalized = accessKey.trim().toLowerCase();
+    const expected = DIRECTION_ACCESS_KEYS[direction];
+    if (!expected) return false;
+    return expected.has(normalized);
+  }
   function clickDirection(direction) {
     const mapContainer = document.querySelector("#ly_map");
     const anchorNodes = [];
@@ -1940,11 +1955,15 @@ tr:last-child td{border-bottom:none}
       anchorNodes.push(...mapContainer.querySelectorAll("a"));
     }
     anchorNodes.push(...document.querySelectorAll("a"));
-    for (const anchor of anchorNodes) {
-      if (matchDirection(anchor, direction)) {
-        anchor.click();
-        return true;
-      }
+    const accessKeyMatch = anchorNodes.find((anchor) => matchAccessKey(anchor, direction));
+    if (accessKeyMatch) {
+      accessKeyMatch.click();
+      return true;
+    }
+    const directionMatch = anchorNodes.find((anchor) => matchDirection(anchor, direction));
+    if (directionMatch) {
+      directionMatch.click();
+      return true;
     }
     return false;
   }

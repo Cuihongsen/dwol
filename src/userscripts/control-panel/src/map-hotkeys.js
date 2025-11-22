@@ -7,6 +7,13 @@ const KEY_DIRECTION = {
   ArrowRight: '右',
 };
 
+const DIRECTION_ACCESS_KEYS = {
+  上: new Set(['2']),
+  下: new Set(['8']),
+  左: new Set(['4']),
+  右: new Set(['6']),
+};
+
 const IGNORE_TAGS = new Set(['input', 'textarea', 'select', 'option', 'button']);
 
 let hotkeysBound = false;
@@ -30,6 +37,16 @@ function matchDirection(el, direction) {
   return parsed.direction === direction;
 }
 
+function matchAccessKey(el, direction) {
+  if (!el || !el.getAttribute) return false;
+  const accessKey = el.getAttribute('accesskey');
+  if (!accessKey) return false;
+  const normalized = accessKey.trim().toLowerCase();
+  const expected = DIRECTION_ACCESS_KEYS[direction];
+  if (!expected) return false;
+  return expected.has(normalized);
+}
+
 function clickDirection(direction) {
   const mapContainer = document.querySelector('#ly_map');
   const anchorNodes = [];
@@ -38,12 +55,18 @@ function clickDirection(direction) {
   }
   anchorNodes.push(...document.querySelectorAll('a'));
 
-  for (const anchor of anchorNodes) {
-    if (matchDirection(anchor, direction)) {
-      anchor.click();
-      return true;
-    }
+  const accessKeyMatch = anchorNodes.find((anchor) => matchAccessKey(anchor, direction));
+  if (accessKeyMatch) {
+    accessKeyMatch.click();
+    return true;
   }
+
+  const directionMatch = anchorNodes.find((anchor) => matchDirection(anchor, direction));
+  if (directionMatch) {
+    directionMatch.click();
+    return true;
+  }
+
   return false;
 }
 
