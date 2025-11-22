@@ -4,6 +4,8 @@ import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 
 const CLICK_INTERVAL_MS = 700;
 const TARGET_TEXT = '普通攻击';
+const RETURN_TEXT = '返回游戏';
+const END_TEXT = '战斗已经结束';
 const LS_ENABLED = 'atk_enabled_v1';
 const LS_STATS = 'atk_stats_v1';
 const MODULE_ID = 'atk';
@@ -43,9 +45,31 @@ function findAttackButton() {
   });
 }
 
+function findReturnButton() {
+  return $$('a,button,input[type="button"],input[type="submit"]').find((el) => {
+    const text = el.textContent ? el.textContent.trim() : '';
+    const value = el instanceof HTMLInputElement ? (el.value || '').trim() : '';
+    return text === RETURN_TEXT || value === RETURN_TEXT;
+  });
+}
+
+function hasBattleEnded() {
+  const body = document.body;
+  if (!body) return false;
+  const text = body.innerText || '';
+  return text.includes(END_TEXT);
+}
+
 function startClicking() {
   stopClicking();
   clickTimer = setInterval(() => {
+    if (hasBattleEnded()) {
+      const returnButton = findReturnButton();
+      if (returnButton) {
+        returnButton.click();
+        return;
+      }
+    }
     const target = findAttackButton();
     if (!target) return;
     target.click();

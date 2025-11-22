@@ -1733,6 +1733,8 @@ tr:last-child td{border-bottom:none}
   });
   var CLICK_INTERVAL_MS = 700;
   var TARGET_TEXT2 = "\u666E\u901A\u653B\u51FB";
+  var RETURN_TEXT = "\u8FD4\u56DE\u6E38\u620F";
+  var END_TEXT = "\u6218\u6597\u5DF2\u7ECF\u7ED3\u675F";
   var LS_ENABLED3 = "atk_enabled_v1";
   var LS_STATS3 = "atk_stats_v1";
   var MODULE_ID3 = "atk";
@@ -1765,9 +1767,29 @@ tr:last-child td{border-bottom:none}
       return text === TARGET_TEXT2 || value === TARGET_TEXT2;
     });
   }
+  function findReturnButton() {
+    return $$('a,button,input[type="button"],input[type="submit"]').find((el) => {
+      const text = el.textContent ? el.textContent.trim() : "";
+      const value = el instanceof HTMLInputElement ? (el.value || "").trim() : "";
+      return text === RETURN_TEXT || value === RETURN_TEXT;
+    });
+  }
+  function hasBattleEnded() {
+    const body = document.body;
+    if (!body) return false;
+    const text = body.innerText || "";
+    return text.includes(END_TEXT);
+  }
   function startClicking() {
     stopClicking();
     clickTimer = setInterval(() => {
+      if (hasBattleEnded()) {
+        const returnButton = findReturnButton();
+        if (returnButton) {
+          returnButton.click();
+          return;
+        }
+      }
       const target = findAttackButton();
       if (!target) return;
       target.click();
