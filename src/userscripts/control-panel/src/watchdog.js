@@ -1,5 +1,7 @@
 import { $$ } from './dom.js';
 
+// Global throttle watcher: when the page shows the anti-frequent-access warning,
+// pause all running modules, wait briefly, auto-click the "继续" link, and resume.
 const WATCH_INTERVAL_MS = 300;
 const CONTINUE_DELAY_MS = 1000;
 
