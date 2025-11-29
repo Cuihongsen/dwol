@@ -5,6 +5,7 @@ import * as ATK from './modules/atk.js';
 import * as KGQ from './modules/kgq.js';
 import { startWatchdog } from './watchdog.js';
 import { initMapHotkeys } from './map-hotkeys.js';
+import { mountWatchdogControls } from './watchdog-ui.js';
 
 function init() {
   injectStyle();
@@ -14,6 +15,7 @@ function init() {
   ATK.init();
   KGQ.init();
   initMapHotkeys();
+  mountWatchdogControls();
   startWatchdog([RM, JYG, ATK, KGQ]);
 }
 

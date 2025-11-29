@@ -114,6 +114,7 @@ tr:last-child td{border-bottom:none}
 #um-panel .kv .state[data-state="on"]::before{content:'\u8FD0\u884C\u4E2D';color:#15803d;font-weight:600;text-shadow:0 0 8px rgba(74,222,128,.35)}
 #um-panel .kv .state[data-state="off"]::before{content:'\u5173\u95ED\u4E2D';color:#dc2626;font-weight:600;text-shadow:0 0 6px rgba(248,113,113,.3)}
 #um-panel .hint::before{content:attr(data-label);color:#64748b;font-size:9px;letter-spacing:.04em}
+#um-panel .global{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.86);border-top:1px solid rgba(148,163,184,.35)}
 `;
   function buildSection(title, idPrefix) {
     const sec = document.createElement("section");
@@ -163,8 +164,8 @@ tr:last-child td{border-bottom:none}
     if (stored && MODULES.some((mod) => mod.id === stored)) {
       return stored;
     }
-    const enabled5 = pickEnabledModule();
-    if (enabled5) return enabled5;
+    const enabled6 = pickEnabledModule();
+    if (enabled6) return enabled6;
     return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
   }
   function activate(moduleId, { persist = true } = {}) {
@@ -2220,24 +2221,75 @@ tr:last-child td{border-bottom:none}
   // src/userscripts/control-panel/src/watchdog.js
   var WATCH_INTERVAL_MS = 300;
   var CONTINUE_DELAY_MS = 1e3;
+  var LS_ENABLED5 = "watchdog_enabled_v1";
+  var listeners = /* @__PURE__ */ new Set();
+  var enabled5 = loadBoolean(LS_ENABLED5, true);
+  var throttled = false;
+  var watchTimer = null;
+  var continueTimer = null;
+  var boundModules = [];
+  function notifyListeners() {
+    listeners.forEach((fn) => {
+      try {
+        fn(enabled5);
+      } catch (error) {
+      }
+    });
+  }
+  function isWatchdogEnabled() {
+    return enabled5;
+  }
+  function setWatchdogEnabled(nextEnabled) {
+    enabled5 = Boolean(nextEnabled);
+    saveBoolean(LS_ENABLED5, enabled5);
+    if (!enabled5) {
+      throttled = false;
+      if (continueTimer) {
+        clearTimeout(continueTimer);
+        continueTimer = null;
+      }
+      boundModules.forEach((mod) => {
+        var _a;
+        return (_a = mod.resume) == null ? void 0 : _a.call(mod);
+      });
+    }
+    notifyListeners();
+  }
+  function subscribeWatchdogState(listener) {
+    if (typeof listener !== "function") return () => {
+    };
+    listeners.add(listener);
+    listener(enabled5);
+    return () => listeners.delete(listener);
+  }
   function startWatchdog(modules) {
-    let throttled = false;
-    setInterval(() => {
-      if (throttled) return;
+    boundModules = Array.isArray(modules) ? modules : [];
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = setInterval(() => {
+      if (!enabled5 || throttled) return;
       const text = document.body ? document.body.innerText : "";
       if (text.indexOf("\u60A8\u7684\u70B9\u51FB\u9891\u5EA6\u8FC7\u5FEB") >= 0) {
         throttled = true;
-        modules.forEach((mod) => mod.pause());
-        setTimeout(() => {
+        boundModules.forEach((mod) => {
+          var _a;
+          return (_a = mod.pause) == null ? void 0 : _a.call(mod);
+        });
+        continueTimer = setTimeout(() => {
           const cont = $$("a").find(
             (el) => el.textContent && el.textContent.trim() === "\u7EE7\u7EED"
           );
           if (cont) cont.click();
           throttled = false;
-          modules.forEach((mod) => mod.resume());
+          boundModules.forEach((mod) => {
+            var _a;
+            return (_a = mod.resume) == null ? void 0 : _a.call(mod);
+          });
+          notifyListeners();
         }, CONTINUE_DELAY_MS);
+        notifyListeners();
       }
     }, WATCH_INTERVAL_MS);
+    notifyListeners();
   }
 
   // src/userscripts/control-panel/src/map-hotkeys.js
@@ -2316,6 +2368,69 @@ tr:last-child td{border-bottom:none}
     hotkeysBound = true;
   }
 
+  // src/userscripts/control-panel/src/watchdog-ui.js
+  var WATCHDOG_ID = "watchdog-controls";
+  var TOGGLE_ID = "watchdog-toggle";
+  var STATUS_ID = "watchdog-status";
+  function updateUI5(enabled6) {
+    const status = $(`#${STATUS_ID}`);
+    if (status) {
+      status.dataset.state = enabled6 ? "on" : "off";
+    }
+    const toggle = $(`#${TOGGLE_ID}`);
+    if (toggle) {
+      toggle.dataset.mode = enabled6 ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled6 ? "true" : "false");
+    }
+  }
+  function bindHandlers() {
+    const toggle = $(`#${TOGGLE_ID}`);
+    if (toggle) {
+      toggle.onclick = () => setWatchdogEnabled(!isWatchdogEnabled());
+    }
+  }
+  function mountWatchdogControls() {
+    const panel = $("#um-panel");
+    if (!panel) return;
+    if ($(`#${WATCHDOG_ID}`)) {
+      updateUI5(isWatchdogEnabled());
+      return;
+    }
+    const global = document.createElement("div");
+    global.id = WATCHDOG_ID;
+    global.className = "global";
+    global.innerHTML = `
+    <div class="hdr">
+      <b data-label="\u5168\u5C40"></b>
+      <div class="actions">
+        <button
+          id="${TOGGLE_ID}"
+          type="button"
+          data-role="toggle"
+          data-mode="${isWatchdogEnabled() ? "on" : "off"}"
+          aria-label="\u8BBF\u95EE\u9891\u7E41\u81EA\u52A8\u7EE7\u7EED\u5F00\u5173"
+          aria-pressed="${isWatchdogEnabled() ? "true" : "false"}"
+        ></button>
+      </div>
+    </div>
+    <div class="body">
+      <div class="kv">
+        <span class="label" data-label="\u8BBF\u95EE\u9891\u7E41\u81EA\u52A8\u7EE7\u7EED"></span>
+        <span
+          id="${STATUS_ID}"
+          class="value state"
+          data-state="${isWatchdogEnabled() ? "on" : "off"}"
+        ></span>
+      </div>
+      <div class="hint" data-label="\u51FA\u73B0\u201C\u60A8\u7684\u70B9\u51FB\u9891\u5EA6\u8FC7\u5FEB\u201D\u65F6\u81EA\u52A8\u6682\u505C\u5404\u6A21\u5757\u5E76\u70B9\u51FB\u201C\u7EE7\u7EED\u201D\u3002"></div>
+    </div>
+  `;
+    panel.appendChild(global);
+    bindHandlers();
+    subscribeWatchdogState(updateUI5);
+    updateUI5(isWatchdogEnabled());
+  }
+
   // src/userscripts/control-panel/src/index.js
   function init5() {
     injectStyle();
@@ -2325,6 +2440,7 @@ tr:last-child td{border-bottom:none}
     init3();
     init4();
     initMapHotkeys();
+    mountWatchdogControls();
     startWatchdog([rm_exports, jyg_exports, atk_exports, kgq_exports]);
   }
   if (document.readyState === "loading") {

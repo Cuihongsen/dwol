@@ -64,6 +64,7 @@ tr:last-child td{border-bottom:none}
 #um-panel .kv .state[data-state="on"]::before{content:'运行中';color:#15803d;font-weight:600;text-shadow:0 0 8px rgba(74,222,128,.35)}
 #um-panel .kv .state[data-state="off"]::before{content:'关闭中';color:#dc2626;font-weight:600;text-shadow:0 0 6px rgba(248,113,113,.3)}
 #um-panel .hint::before{content:attr(data-label);color:#64748b;font-size:9px;letter-spacing:.04em}
+#um-panel .global{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.86);border-top:1px solid rgba(148,163,184,.35)}
 `;
 
 function buildSection(title, idPrefix) {
