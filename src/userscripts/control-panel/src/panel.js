@@ -9,6 +9,7 @@ const MODULES = [
   { id: 'rm', title: '刷新马', enabledKey: 'rm_enabled_v1' },
   { id: 'jyg', title: '景阳岗', enabledKey: 'jyg_enabled_v1' },
   { id: 'atk', title: '自动打怪', enabledKey: 'atk_enabled_v1' },
+  { id: 'kgq', title: '金刚圈', enabledKey: 'kgq_enabled_v1' },
 ];
 
 let navButtons = [];
