@@ -1937,7 +1937,11 @@ tr:last-child td{border-bottom:none}
   var LS_SIZE = "kgq_size_v1";
   var LS_STATS4 = "kgq_stats_v1";
   var TOKEN_TEXT = "[\u91D1\u521A\u5708]";
-  var MAP_SIZES = [3, 5, 7, 9, 11, 13];
+  var MAX_SIZE = 50;
+  var MAP_SIZES = Array.from(
+    { length: Math.floor((MAX_SIZE - 3) / 2) + 1 },
+    (_, i) => 3 + i * 2
+  );
   var enabled4 = loadBoolean(LS_ENABLED4);
   var size = loadSize();
   var route = buildRoute(size);
@@ -1956,8 +1960,10 @@ tr:last-child td{border-bottom:none}
   }
   function normalizeSize(value) {
     const fallback = MAP_SIZES[1] || 5;
-    const candidate = Number.isFinite(value) ? Math.max(3, Math.floor(value)) : fallback;
-    return candidate % 2 === 0 ? candidate + 1 : candidate;
+    const minClamped = Number.isFinite(value) ? Math.max(3, Math.floor(value)) : fallback;
+    const clamped = Math.min(minClamped, MAX_SIZE);
+    const normalized = clamped % 2 === 0 ? clamped - 1 : clamped;
+    return Math.max(3, normalized);
   }
   function loadStats4() {
     const stats = loadJSON(LS_STATS4);

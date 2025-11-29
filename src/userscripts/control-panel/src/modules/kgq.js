@@ -9,7 +9,11 @@ const LS_ENABLED = 'kgq_enabled_v1';
 const LS_SIZE = 'kgq_size_v1';
 const LS_STATS = 'kgq_stats_v1';
 const TOKEN_TEXT = '[金刚圈]';
-const MAP_SIZES = [3, 5, 7, 9, 11, 13];
+const MAX_SIZE = 50;
+const MAP_SIZES = Array.from(
+  { length: Math.floor((MAX_SIZE - 3) / 2) + 1 },
+  (_, i) => 3 + i * 2,
+);
 
 let enabled = loadBoolean(LS_ENABLED);
 let size = loadSize();
@@ -32,8 +36,10 @@ function saveSize(value) {
 
 function normalizeSize(value) {
   const fallback = MAP_SIZES[1] || 5;
-  const candidate = Number.isFinite(value) ? Math.max(3, Math.floor(value)) : fallback;
-  return candidate % 2 === 0 ? candidate + 1 : candidate;
+  const minClamped = Number.isFinite(value) ? Math.max(3, Math.floor(value)) : fallback;
+  const clamped = Math.min(minClamped, MAX_SIZE);
+  const normalized = clamped % 2 === 0 ? clamped - 1 : clamped;
+  return Math.max(3, normalized);
 }
 
 function loadStats() {
