@@ -60,7 +60,8 @@
   var MODULES = [
     { id: "rm", title: "\u5237\u65B0\u9A6C", enabledKey: "rm_enabled_v1" },
     { id: "jyg", title: "\u666F\u9633\u5C97", enabledKey: "jyg_enabled_v1" },
-    { id: "atk", title: "\u81EA\u52A8\u6253\u602A", enabledKey: "atk_enabled_v1" }
+    { id: "atk", title: "\u81EA\u52A8\u6253\u602A", enabledKey: "atk_enabled_v1" },
+    { id: "kgq", title: "\u91D1\u521A\u5708", enabledKey: "kgq_enabled_v1" }
   ];
   var navButtons = [];
   var sections = [];
@@ -113,6 +114,7 @@ tr:last-child td{border-bottom:none}
 #um-panel .kv .state[data-state="on"]::before{content:'\u8FD0\u884C\u4E2D';color:#15803d;font-weight:600;text-shadow:0 0 8px rgba(74,222,128,.35)}
 #um-panel .kv .state[data-state="off"]::before{content:'\u5173\u95ED\u4E2D';color:#dc2626;font-weight:600;text-shadow:0 0 6px rgba(248,113,113,.3)}
 #um-panel .hint::before{content:attr(data-label);color:#64748b;font-size:9px;letter-spacing:.04em}
+#um-panel .global{padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.86);border-top:1px solid rgba(148,163,184,.35)}
 `;
   function buildSection(title, idPrefix) {
     const sec = document.createElement("section");
@@ -162,8 +164,8 @@ tr:last-child td{border-bottom:none}
     if (stored && MODULES.some((mod) => mod.id === stored)) {
       return stored;
     }
-    const enabled4 = pickEnabledModule();
-    if (enabled4) return enabled4;
+    const enabled6 = pickEnabledModule();
+    if (enabled6) return enabled6;
     return (_b = (_a = MODULES[0]) == null ? void 0 : _a.id) != null ? _b : null;
   }
   function activate(moduleId, { persist = true } = {}) {
@@ -839,10 +841,10 @@ tr:last-child td{border-bottom:none}
     }
     return "-";
   }
-  function formatPlannedRoute(route, state) {
-    if (!route.length) return "-";
+  function formatPlannedRoute(route2, state) {
+    if (!route2.length) return "-";
     const parts = [];
-    for (const step of route) {
+    for (const step of route2) {
       const fromNode = step.from ? state.nodes.get(step.from) : null;
       const toNode = step.to ? state.nodes.get(step.to) : null;
       const fromLabel = fromNode ? formatLocationName(fromNode, { includeHint: false }) : step.from || "-";
@@ -1923,27 +1925,371 @@ tr:last-child td{border-bottom:none}
     }
   }
 
+  // src/userscripts/control-panel/src/modules/kgq.js
+  var kgq_exports = {};
+  __export(kgq_exports, {
+    init: () => init4,
+    pause: () => pause4,
+    resume: () => resume4
+  });
+  var MOVE_INTERVAL_MS = 800;
+  var MODULE_ID4 = "kgq";
+  var LS_ENABLED4 = "kgq_enabled_v1";
+  var LS_SIZE = "kgq_size_v1";
+  var LS_STATS4 = "kgq_stats_v1";
+  var TOKEN_TEXT = "[\u91D1\u521A\u5708]";
+  var MAX_SIZE = 50;
+  var MAP_SIZES = Array.from(
+    { length: Math.floor((MAX_SIZE - 3) / 2) + 1 },
+    (_, i) => 3 + i * 2
+  );
+  var enabled4 = loadBoolean(LS_ENABLED4);
+  var size = loadSize();
+  var route = buildRoute(size);
+  var moveTimer = null;
+  var stepIndex = 0;
+  var moveCount = 0;
+  var lastDirection = "-";
+  var lastMoveAt = 0;
+  function loadSize() {
+    const stored = Number(localStorage.getItem(LS_SIZE));
+    const normalized = normalizeSize(Number.isFinite(stored) ? stored : null);
+    return normalized;
+  }
+  function saveSize(value) {
+    localStorage.setItem(LS_SIZE, String(value));
+  }
+  function normalizeSize(value) {
+    const fallback = MAP_SIZES[1] || 5;
+    const minClamped = Number.isFinite(value) ? Math.max(3, Math.floor(value)) : fallback;
+    const clamped = Math.min(minClamped, MAX_SIZE);
+    const normalized = clamped % 2 === 0 ? clamped - 1 : clamped;
+    return Math.max(3, normalized);
+  }
+  function loadStats4() {
+    const stats = loadJSON(LS_STATS4);
+    if (!stats) return;
+    const loadedIndex = Number(stats.stepIndex) || 0;
+    moveCount = Number(stats.moveCount) || 0;
+    lastDirection = stats.lastDirection ? String(stats.lastDirection) : "-";
+    lastMoveAt = typeof stats.lastMoveAt === "number" ? stats.lastMoveAt : 0;
+    stepIndex = route.length ? Math.min(loadedIndex, route.length - 1) : 0;
+  }
+  function saveStats4() {
+    saveJSON(LS_STATS4, { stepIndex, moveCount, lastDirection, lastMoveAt });
+  }
+  function resetStats4() {
+    stepIndex = 0;
+    moveCount = 0;
+    lastDirection = "-";
+    lastMoveAt = 0;
+    saveStats4();
+    updateUI4();
+  }
+  function announceState4() {
+    emitModuleState({ moduleId: MODULE_ID4, enabled: enabled4 });
+  }
+  function shouldContinue() {
+    const body = document.body ? document.body.innerText : "";
+    return body.includes(TOKEN_TEXT);
+  }
+  function directionDelta(direction) {
+    switch (direction) {
+      case "\u4E0A":
+        return { dx: 0, dy: -1 };
+      case "\u4E0B":
+        return { dx: 0, dy: 1 };
+      case "\u5DE6":
+        return { dx: -1, dy: 0 };
+      case "\u53F3":
+        return { dx: 1, dy: 0 };
+      default:
+        return { dx: 0, dy: 0 };
+    }
+  }
+  function buildRoute(sizeValue) {
+    const limit = Math.max(1, Math.floor(normalizeSize(sizeValue) / 2));
+    const targetSteps = normalizeSize(sizeValue) * normalizeSize(sizeValue) - 1;
+    const directions = ["\u53F3", "\u4E0B", "\u5DE6", "\u4E0A"];
+    let stepLength = 1;
+    let directionIndex = 0;
+    const steps = [];
+    let posX = 0;
+    let posY = 0;
+    let guard = 0;
+    const appendSteps = (direction, count) => {
+      const { dx, dy } = directionDelta(direction);
+      for (let i = 0; i < count; i += 1) {
+        const nextX = posX + dx;
+        const nextY = posY + dy;
+        if (Math.abs(nextX) > limit || Math.abs(nextY) > limit) {
+          break;
+        }
+        posX = nextX;
+        posY = nextY;
+        steps.push(direction);
+        if (steps.length >= targetSteps) {
+          return true;
+        }
+      }
+      return false;
+    };
+    while (steps.length < targetSteps && guard < targetSteps * 2) {
+      const dirA = directions[directionIndex % directions.length];
+      if (appendSteps(dirA, stepLength)) break;
+      directionIndex += 1;
+      const dirB = directions[directionIndex % directions.length];
+      if (appendSteps(dirB, stepLength)) break;
+      directionIndex += 1;
+      stepLength += 1;
+      guard += 1;
+    }
+    return steps;
+  }
+  function matchDirection(el, direction) {
+    if (!el) return false;
+    const dataDir = el.dataset && el.dataset.direction ? el.dataset.direction.trim() : "";
+    if (dataDir === direction) return true;
+    const text = el.textContent ? el.textContent.trim() : "";
+    if (!text) return false;
+    if (text === direction) return true;
+    const parsed = parseDirectionalLabel(text);
+    return parsed.direction === direction;
+  }
+  function findDirectionAnchor(direction) {
+    const anchors = [];
+    const mapContainer = document.querySelector("#ly_map");
+    if (mapContainer) {
+      anchors.push(...mapContainer.querySelectorAll("a"));
+    }
+    anchors.push(...document.querySelectorAll("a"));
+    return anchors.find((anchor) => matchDirection(anchor, direction));
+  }
+  function clickDirection(direction) {
+    const anchor = findDirectionAnchor(direction);
+    if (!anchor) return false;
+    anchor.click();
+    return true;
+  }
+  function startMoving() {
+    stopMoving();
+    moveTimer = setInterval(() => {
+      if (!shouldContinue()) return;
+      if (!route.length) return;
+      const direction = route[stepIndex] || "\u53F3";
+      const clicked = clickDirection(direction);
+      if (!clicked) return;
+      lastDirection = direction;
+      lastMoveAt = now();
+      moveCount += 1;
+      stepIndex = (stepIndex + 1) % route.length;
+      saveStats4();
+      updateUI4();
+    }, MOVE_INTERVAL_MS);
+  }
+  function stopMoving() {
+    if (moveTimer) clearInterval(moveTimer);
+    moveTimer = null;
+  }
+  function enable4() {
+    enabled4 = true;
+    saveBoolean(LS_ENABLED4, true);
+    startMoving();
+    updateUI4();
+    announceState4();
+  }
+  function disable4() {
+    enabled4 = false;
+    saveBoolean(LS_ENABLED4, false);
+    stopMoving();
+    updateUI4();
+    announceState4();
+  }
+  function toggleEnabled4() {
+    if (enabled4) {
+      disable4();
+    } else {
+      enable4();
+    }
+  }
+  function handleSizeChange(next) {
+    const normalized = normalizeSize(next);
+    size = normalized;
+    saveSize(size);
+    route = buildRoute(size);
+    resetStats4();
+  }
+  function mountUI4() {
+    const body = $("#kgq-body");
+    if (!body) return;
+    body.innerHTML = `
+    <div class="kv"><span class="label" data-label="\u72B6\u6001"></span><span
+        id="kgq-status"
+        class="value state"
+        data-state="${enabled4 ? "on" : "off"}"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u5730\u56FE\u8FB9\u957F"></span><span
+        class="value"
+      ><select id="kgq-size" aria-label="\u91D1\u521A\u5708 \u5730\u56FE\u8FB9\u957F">
+        ${MAP_SIZES.map((value) => `<option value="${value}">${value} x ${value}</option>`).join("")}
+      </select></span></div>
+    <div class="kv"><span class="label" data-label="\u603B\u6B65\u6570"></span><span
+        id="kgq-total"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u5DF2\u8D70\u6B65\u6570"></span><span
+        id="kgq-progress"
+        class="value"
+        data-value="0"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u5F53\u524D\u65B9\u5411"></span><span
+        id="kgq-direction"
+        class="value"
+        data-value="-"
+      ></span></div>
+    <div class="kv"><span class="label" data-label="\u4E0A\u6B21\u79FB\u52A8"></span><span
+        id="kgq-last"
+        class="value"
+        data-value="-"
+      ></span></div>
+  `;
+    const toggle = $("#kgq-toggle");
+    if (toggle) {
+      toggle.onclick = () => toggleEnabled4();
+    }
+    const reset = $("#kgq-reset");
+    if (reset) {
+      reset.onclick = () => resetStats4();
+    }
+    const sizeSelect = $("#kgq-size");
+    if (sizeSelect instanceof HTMLSelectElement) {
+      sizeSelect.onchange = () => {
+        const nextSize = Number(sizeSelect.value);
+        if (!Number.isFinite(nextSize)) return;
+        handleSizeChange(nextSize);
+        if (enabled4) {
+          startMoving();
+        }
+      };
+    }
+    updateUI4();
+  }
+  function updateUI4() {
+    const status = $("#kgq-status");
+    if (status) {
+      status.dataset.state = enabled4 ? "on" : "off";
+    }
+    const toggle = $("#kgq-toggle");
+    if (toggle) {
+      toggle.dataset.mode = enabled4 ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled4 ? "true" : "false");
+    }
+    const sizeSelect = $("#kgq-size");
+    if (sizeSelect instanceof HTMLSelectElement) {
+      const normalized = normalizeSize(size);
+      if (!MAP_SIZES.includes(normalized)) {
+        const opt = document.createElement("option");
+        opt.value = String(normalized);
+        opt.textContent = `${normalized} x ${normalized}`;
+        sizeSelect.appendChild(opt);
+      }
+      sizeSelect.value = String(normalized);
+    }
+    safeText($("#kgq-total"), route.length);
+    safeText($("#kgq-progress"), moveCount);
+    safeText($("#kgq-direction"), lastDirection);
+    safeText($("#kgq-last"), formatTime(lastMoveAt));
+  }
+  function init4() {
+    loadStats4();
+    mountUI4();
+    announceState4();
+    if (enabled4) {
+      startMoving();
+    }
+  }
+  function pause4() {
+    stopMoving();
+  }
+  function resume4() {
+    if (enabled4) {
+      startMoving();
+    }
+  }
+
   // src/userscripts/control-panel/src/watchdog.js
   var WATCH_INTERVAL_MS = 300;
   var CONTINUE_DELAY_MS = 1e3;
+  var LS_ENABLED5 = "watchdog_enabled_v1";
+  var listeners = /* @__PURE__ */ new Set();
+  var enabled5 = loadBoolean(LS_ENABLED5, true);
+  var throttled = false;
+  var watchTimer = null;
+  var continueTimer = null;
+  var boundModules = [];
+  function notifyListeners() {
+    listeners.forEach((fn) => {
+      try {
+        fn(enabled5);
+      } catch (error) {
+      }
+    });
+  }
+  function isWatchdogEnabled() {
+    return enabled5;
+  }
+  function setWatchdogEnabled(nextEnabled) {
+    enabled5 = Boolean(nextEnabled);
+    saveBoolean(LS_ENABLED5, enabled5);
+    if (!enabled5) {
+      throttled = false;
+      if (continueTimer) {
+        clearTimeout(continueTimer);
+        continueTimer = null;
+      }
+      boundModules.forEach((mod) => {
+        var _a;
+        return (_a = mod.resume) == null ? void 0 : _a.call(mod);
+      });
+    }
+    notifyListeners();
+  }
+  function subscribeWatchdogState(listener) {
+    if (typeof listener !== "function") return () => {
+    };
+    listeners.add(listener);
+    listener(enabled5);
+    return () => listeners.delete(listener);
+  }
   function startWatchdog(modules) {
-    let throttled = false;
-    setInterval(() => {
-      if (throttled) return;
+    boundModules = Array.isArray(modules) ? modules : [];
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = setInterval(() => {
+      if (!enabled5 || throttled) return;
       const text = document.body ? document.body.innerText : "";
       if (text.indexOf("\u60A8\u7684\u70B9\u51FB\u9891\u5EA6\u8FC7\u5FEB") >= 0) {
         throttled = true;
-        modules.forEach((mod) => mod.pause());
-        setTimeout(() => {
+        boundModules.forEach((mod) => {
+          var _a;
+          return (_a = mod.pause) == null ? void 0 : _a.call(mod);
+        });
+        continueTimer = setTimeout(() => {
           const cont = $$("a").find(
             (el) => el.textContent && el.textContent.trim() === "\u7EE7\u7EED"
           );
           if (cont) cont.click();
           throttled = false;
-          modules.forEach((mod) => mod.resume());
+          boundModules.forEach((mod) => {
+            var _a;
+            return (_a = mod.resume) == null ? void 0 : _a.call(mod);
+          });
+          notifyListeners();
         }, CONTINUE_DELAY_MS);
+        notifyListeners();
       }
     }, WATCH_INTERVAL_MS);
+    notifyListeners();
   }
 
   // src/userscripts/control-panel/src/map-hotkeys.js
@@ -1968,7 +2314,7 @@ tr:last-child td{border-bottom:none}
     if (tag === "div" && target.isContentEditable) return true;
     return false;
   }
-  function matchDirection(el, direction) {
+  function matchDirection2(el, direction) {
     if (!el) return false;
     const dataDir = el.dataset && el.dataset.direction ? el.dataset.direction.trim() : "";
     if (dataDir === direction) return true;
@@ -1987,7 +2333,7 @@ tr:last-child td{border-bottom:none}
     if (!expected) return false;
     return expected.has(normalized);
   }
-  function clickDirection(direction) {
+  function clickDirection2(direction) {
     const mapContainer = document.querySelector("#ly_map");
     const anchorNodes = [];
     if (mapContainer) {
@@ -1999,7 +2345,7 @@ tr:last-child td{border-bottom:none}
       accessKeyMatch.click();
       return true;
     }
-    const directionMatch = anchorNodes.find((anchor) => matchDirection(anchor, direction));
+    const directionMatch = anchorNodes.find((anchor) => matchDirection2(anchor, direction));
     if (directionMatch) {
       directionMatch.click();
       return true;
@@ -2011,7 +2357,7 @@ tr:last-child td{border-bottom:none}
     const direction = KEY_DIRECTION[event.key];
     if (!direction) return;
     if (isTextInput(event.target)) return;
-    const clicked = clickDirection(direction);
+    const clicked = clickDirection2(direction);
     if (clicked) {
       event.preventDefault();
     }
@@ -2022,19 +2368,84 @@ tr:last-child td{border-bottom:none}
     hotkeysBound = true;
   }
 
+  // src/userscripts/control-panel/src/watchdog-ui.js
+  var WATCHDOG_ID = "watchdog-controls";
+  var TOGGLE_ID = "watchdog-toggle";
+  var STATUS_ID = "watchdog-status";
+  function updateUI5(enabled6) {
+    const status = $(`#${STATUS_ID}`);
+    if (status) {
+      status.dataset.state = enabled6 ? "on" : "off";
+    }
+    const toggle = $(`#${TOGGLE_ID}`);
+    if (toggle) {
+      toggle.dataset.mode = enabled6 ? "on" : "off";
+      toggle.setAttribute("aria-pressed", enabled6 ? "true" : "false");
+    }
+  }
+  function bindHandlers() {
+    const toggle = $(`#${TOGGLE_ID}`);
+    if (toggle) {
+      toggle.onclick = () => setWatchdogEnabled(!isWatchdogEnabled());
+    }
+  }
+  function mountWatchdogControls() {
+    const panel = $("#um-panel");
+    if (!panel) return;
+    if ($(`#${WATCHDOG_ID}`)) {
+      updateUI5(isWatchdogEnabled());
+      return;
+    }
+    const global = document.createElement("div");
+    global.id = WATCHDOG_ID;
+    global.className = "global";
+    global.innerHTML = `
+    <div class="hdr">
+      <b data-label="\u5168\u5C40"></b>
+      <div class="actions">
+        <button
+          id="${TOGGLE_ID}"
+          type="button"
+          data-role="toggle"
+          data-mode="${isWatchdogEnabled() ? "on" : "off"}"
+          aria-label="\u8BBF\u95EE\u9891\u7E41\u81EA\u52A8\u7EE7\u7EED\u5F00\u5173"
+          aria-pressed="${isWatchdogEnabled() ? "true" : "false"}"
+        ></button>
+      </div>
+    </div>
+    <div class="body">
+      <div class="kv">
+        <span class="label" data-label="\u8BBF\u95EE\u9891\u7E41\u81EA\u52A8\u7EE7\u7EED"></span>
+        <span
+          id="${STATUS_ID}"
+          class="value state"
+          data-state="${isWatchdogEnabled() ? "on" : "off"}"
+        ></span>
+      </div>
+      <div class="hint" data-label="\u51FA\u73B0\u201C\u60A8\u7684\u70B9\u51FB\u9891\u5EA6\u8FC7\u5FEB\u201D\u65F6\u81EA\u52A8\u6682\u505C\u5404\u6A21\u5757\u5E76\u70B9\u51FB\u201C\u7EE7\u7EED\u201D\u3002"></div>
+    </div>
+  `;
+    panel.appendChild(global);
+    bindHandlers();
+    subscribeWatchdogState(updateUI5);
+    updateUI5(isWatchdogEnabled());
+  }
+
   // src/userscripts/control-panel/src/index.js
-  function init4() {
+  function init5() {
     injectStyle();
     ensurePanel();
     init();
     init2();
     init3();
+    init4();
     initMapHotkeys();
-    startWatchdog([rm_exports, jyg_exports, atk_exports]);
+    mountWatchdogControls();
+    startWatchdog([rm_exports, jyg_exports, atk_exports, kgq_exports]);
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init4);
+    document.addEventListener("DOMContentLoaded", init5);
   } else {
-    init4();
+    init5();
   }
 })();
