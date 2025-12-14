@@ -3,6 +3,7 @@ import { emitModuleState } from '../events.js';
 import { loadBoolean, loadJSON, saveBoolean, saveJSON } from '../storage.js';
 
 const CLICK_INTERVAL_MS = 700;
+const STATS_FLUSH_MS = 3_000;
 const RETURN_TEXT = '返回游戏';
 const END_TEXT = '战斗已经结束';
 const LS_ENABLED = 'atk_enabled_v1';
@@ -19,6 +20,7 @@ let enabled = loadBoolean(LS_ENABLED);
 let clickTimer = null;
 let clickCount = 0;
 let lastClickAt = 0;
+let statsFlushTimer = null;
 let action = ATTACK_OPTIONS[0].value;
 
 function loadStats() {
@@ -39,6 +41,22 @@ function saveStats() {
   saveJSON(LS_STATS, { clickCount, lastClickAt });
 }
 
+function flushStats() {
+  if (statsFlushTimer) {
+    clearTimeout(statsFlushTimer);
+    statsFlushTimer = null;
+  }
+  saveStats();
+}
+
+function scheduleStatsFlush() {
+  if (statsFlushTimer) return;
+  statsFlushTimer = setTimeout(() => {
+    statsFlushTimer = null;
+    saveStats();
+  }, STATS_FLUSH_MS);
+}
+
 function saveAction() {
   saveJSON(LS_ACTION, action);
 }
@@ -46,7 +64,7 @@ function saveAction() {
 function resetStats() {
   clickCount = 0;
   lastClickAt = 0;
-  saveStats();
+  flushStats();
   updateUI();
 }
 
@@ -93,7 +111,7 @@ function startClicking() {
     target.click();
     clickCount += 1;
     lastClickAt = now();
-    saveStats();
+    scheduleStatsFlush();
     updateUI();
   }, CLICK_INTERVAL_MS);
 }
@@ -115,6 +133,7 @@ function disable() {
   enabled = false;
   saveBoolean(LS_ENABLED, false);
   stopClicking();
+  flushStats();
   updateUI();
   announceState();
 }
@@ -199,6 +218,7 @@ export function init() {
   loadAction();
   mountUI();
   announceState();
+  window.addEventListener('beforeunload', () => flushStats());
   if (enabled) {
     startClicking();
   }
@@ -206,6 +226,7 @@ export function init() {
 
 export function pause() {
   stopClicking();
+  flushStats();
 }
 
 export function resume() {
