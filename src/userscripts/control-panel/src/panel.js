@@ -21,8 +21,7 @@ const PANEL_STYLE = `
 #um-panel,#um-panel *{box-sizing:border-box}
 #um-panel{position:fixed;right:14px;bottom:14px;width:230px;z-index:2147483647;font:10.5px/1.5 'Inter',system-ui,-apple-system,'PingFang SC',sans-serif;color:#111827;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 10px 26px rgba(15,23,42,.12);overflow:hidden}
 #um-panel .nav{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid #e5e7eb;background:#fff}
-#um-panel .nav button{flex:1;border:1px solid #e5e7eb;border-radius:9px;padding:6px 0;background:#f8fafc;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease;min-width:0;font-weight:600;letter-spacing:.04em;color:#0f172a;font-size:10.5px}
-#um-panel .nav button::before{content:attr(data-label)}
+#um-panel .nav button{flex:1;border:1px solid #e5e7eb;border-radius:9px;padding:6px 0;background:#f8fafc;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease;min-width:0;font-weight:700;letter-spacing:.04em;color:#0b1021;font-size:10.5px;text-align:center}
 #um-panel .nav button[data-active="true"]{background:#e0f2fe;border-color:#bfdbfe;color:#1d4ed8}
 #um-panel .nav button:focus-visible{outline:2px solid #38bdf8;outline-offset:1px}
 #um-panel .modules{padding:8px 10px 10px}
@@ -191,7 +190,7 @@ export function ensurePanel() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.module = mod.id;
-    button.dataset.label = mod.title;
+    button.textContent = mod.title;
     button.setAttribute('aria-label', `${mod.title} 面板`);
     button.setAttribute('aria-pressed', index === 0 ? 'true' : 'false');
     button.dataset.active = index === 0 ? 'true' : 'false';
